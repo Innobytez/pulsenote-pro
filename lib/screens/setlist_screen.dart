@@ -241,20 +241,24 @@ class _BpmEntryDialogState extends State<_BpmEntryDialog> {
             ),
           ),
           const SizedBox(height: 10),
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('BPM:'),
-              Expanded(
-                child: Slider(
-                  value: _bpm.toDouble(),
-                  min: 10,
-                  max: 200,
-                  divisions: 190,
-                  label: '$_bpm',
-                  onChanged: (val) => setState(() => _bpm = val.round()),
+              Slider(
+                value: _bpm.toDouble(),
+                min: 10,
+                max: 240,
+                divisions: 230,
+                label: '$_bpm',
+                onChanged: (val) => setState(() => _bpm = val.round()),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'BPM: $_bpm',
+                  style: TextStyle(fontSize: 16),
                 ),
               ),
-              Text('$_bpm'),
             ],
           ),
         ],

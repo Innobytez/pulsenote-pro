@@ -1,9 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.innobytez.pulsenoteapp">
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <application
         android:label="PulseNote Pro"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:foregroundServiceType="mediaPlayback">
         <activity
             android:name=".MainActivity"
             android:exported="true"

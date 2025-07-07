@@ -1,4 +1,5 @@
 import 'package:flutter_sound/flutter_sound.dart';
+import 'package:audio_session/audio_session.dart';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -10,6 +11,11 @@ class AudioService {
 
   static Future<void> _init() async {
     if (_isInitialized) return;
+
+    // Configure audio session for silent mode + background support
+    final session = await AudioSession.instance;
+    await session.configure(AudioSessionConfiguration.music());
+
     await _player.openPlayer();
     _generateClickBuffer();
     _generateSilentBuffer();
@@ -19,14 +25,14 @@ class AudioService {
   static void _generateClickBuffer() {
     const sampleRate = 44100;
     const durationMs = 80;
-    final int samples = (durationMs / 1000 * sampleRate).round();
-    const double amplitude = 0.3;
-    const double frequency = 1000.0;
+    final samples = (durationMs / 1000 * sampleRate).round();
+    const amplitude = 0.3;
+    const frequency = 1000.0;
 
     final buffer = Int16List(samples);
     for (int i = 0; i < samples; i++) {
-      double t = i / sampleRate;
-      double value = sin(2 * pi * frequency * t);
+      final t = i / sampleRate;
+      final value = sin(2 * pi * frequency * t);
       buffer[i] = (value * amplitude * 32767).toInt();
     }
 
@@ -36,8 +42,8 @@ class AudioService {
   static void _generateSilentBuffer() {
     const sampleRate = 44100;
     const durationMs = 30;
-    final int samples = (durationMs / 1000 * sampleRate).round();
-    final buffer = Int16List(samples); // all zeros
+    final samples = (durationMs / 1000 * sampleRate).round();
+    final buffer = Int16List(samples); // silent = zeros
     _silentBuffer = Uint8List.view(buffer.buffer);
   }
 
@@ -70,14 +76,14 @@ class AudioService {
     final freq = _noteFrequencies[note] ?? 440.0;
 
     const sampleRate = 44100;
-    final durationMs = 300;
-    final int samples = (durationMs / 1000 * sampleRate).round();
-    const double amplitude = 0.3;
+    const durationMs = 300;
+    final samples = (durationMs / 1000 * sampleRate).round();
+    const amplitude = 0.3;
 
     final buffer = Int16List(samples);
     for (int i = 0; i < samples; i++) {
-      double t = i / sampleRate;
-      double value = sin(2 * pi * freq * t);
+      final t = i / sampleRate;
+      final value = sin(2 * pi * freq * t);
       buffer[i] = (value * amplitude * 32767).toInt();
     }
 

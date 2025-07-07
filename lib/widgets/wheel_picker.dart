@@ -26,6 +26,7 @@ class _WheelPickerState extends State<WheelPicker> with SingleTickerProviderStat
   late int _bpm;
   Offset _center = Offset.zero;
   double? _lastAngle;
+  double _angleAccumulator = 0;
 
   late AnimationController _dotRotationController;
   late Animation<double> _dotRotation;
@@ -56,7 +57,6 @@ class _WheelPickerState extends State<WheelPicker> with SingleTickerProviderStat
         ).animate(CurvedAnimation(parent: _dotRotationController, curve: Curves.easeOut));
         _dotRotationController.forward(from: 0);
       } else {
-        // Avoid jump animation on initial BPM set
         _dotRotation = AlwaysStoppedAnimation(newAngle);
         _hasInitialized = true;
       }
@@ -84,8 +84,11 @@ class _WheelPickerState extends State<WheelPicker> with SingleTickerProviderStat
         delta -= 2 * pi * delta.sign;
       }
 
-      final bpmChange = (delta * 30).round();
+      _angleAccumulator += delta;
+      final bpmChange = (_angleAccumulator * 30).truncate(); // 30 = sensitivity
+
       if (bpmChange != 0) {
+        _angleAccumulator -= bpmChange / 30.0; // remove used part
         final newBpm = (_bpm + bpmChange).clamp(widget.minBpm, widget.maxBpm);
         if (newBpm != _bpm) {
           HapticFeedback.selectionClick();
@@ -127,7 +130,10 @@ class _WheelPickerState extends State<WheelPicker> with SingleTickerProviderStat
         _handleRotation(details.localPosition);
       },
       onPanUpdate: (details) => _handleRotation(details.localPosition),
-      onPanEnd: (_) => _lastAngle = null,
+      onPanEnd: (_) {
+        _lastAngle = null;
+        _angleAccumulator = 0;
+      },
       child: SizedBox(
         width: size,
         height: size,
