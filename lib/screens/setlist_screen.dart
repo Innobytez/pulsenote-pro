@@ -5,6 +5,7 @@ import 'dart:async';
 import '../models/bpm_entry.dart';
 import '../services/audio_service.dart';
 import '../services/tick_service.dart';
+import '../widgets/wheel_picker.dart';
 
 class SetlistScreen extends StatefulWidget {
   @override
@@ -48,7 +49,12 @@ class _SetlistScreenState extends State<SetlistScreen> {
       builder: (context) => _BpmEntryDialog(),
     );
     if (entry != null) {
-      setState(() => _setlist.insert(0, entry));
+      setState(() {
+        _setlist.insert(0, entry);
+        if (_playingIndex != null) {
+          _playingIndex = _playingIndex! + 1;
+        }
+      });
       await _saveSetlist();
       await Future.delayed(Duration(milliseconds: 100));
       if (_scrollController.hasClients) {
@@ -241,25 +247,12 @@ class _BpmEntryDialogState extends State<_BpmEntryDialog> {
             ),
           ),
           const SizedBox(height: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Slider(
-                value: _bpm.toDouble(),
-                min: 10,
-                max: 240,
-                divisions: 230,
-                label: '$_bpm',
-                onChanged: (val) => setState(() => _bpm = val.round()),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  'BPM: $_bpm',
-                  style: TextStyle(fontSize: 16),
-                ),
-              ),
-            ],
+          WheelPicker(
+            initialBpm: _bpm,
+            minBpm: 10,
+            maxBpm: 240,
+            wheelSize: 160, // <- Force exact size, matches what you wanted
+            onBpmChanged: (val) => setState(() => _bpm = val),
           ),
         ],
       ),

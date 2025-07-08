@@ -5,7 +5,8 @@
         android:label="PulseNote Pro"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:foregroundServiceType="mediaPlayback">
+        android:foregroundServiceType="mediaPlayback"
+        android:enableOnBackInvokedCallback="true">>
         <activity
             android:name=".MainActivity"
             android:exported="true"

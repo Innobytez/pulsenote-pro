@@ -12,7 +12,6 @@ class AudioService {
   static Future<void> _init() async {
     if (_isInitialized) return;
 
-    // Configure audio session for silent mode + background support
     final session = await AudioSession.instance;
     await session.configure(AudioSessionConfiguration.music());
 
@@ -24,15 +23,16 @@ class AudioService {
 
   static void _generateClickBuffer() {
     const sampleRate = 44100;
-    const durationMs = 80;
+    const durationMs = 25; // Shorter duration for a tighter click
     final samples = (durationMs / 1000 * sampleRate).round();
-    const amplitude = 0.3;
+    const amplitude = 0.6; // Louder volume
     const frequency = 1000.0;
 
     final buffer = Int16List(samples);
     for (int i = 0; i < samples; i++) {
       final t = i / sampleRate;
-      final value = sin(2 * pi * frequency * t);
+      final envelope = 1.0 - (i / samples); // Linear fade-out
+      final value = sin(2 * pi * frequency * t) * envelope;
       buffer[i] = (value * amplitude * 32767).toInt();
     }
 
@@ -78,12 +78,13 @@ class AudioService {
     const sampleRate = 44100;
     const durationMs = 300;
     final samples = (durationMs / 1000 * sampleRate).round();
-    const amplitude = 0.3;
+    const amplitude = 0.6;
 
     final buffer = Int16List(samples);
     for (int i = 0; i < samples; i++) {
       final t = i / sampleRate;
-      final value = sin(2 * pi * freq * t);
+      final envelope = 1.0 - (i / samples); // Linear fade-out
+      final value = sin(2 * pi * freq * t) * envelope;
       buffer[i] = (value * amplitude * 32767).toInt();
     }
 

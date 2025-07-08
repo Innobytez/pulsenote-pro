@@ -293,7 +293,7 @@ class _NoteGeneratorScreenState extends State<NoteGeneratorScreen> with SingleTi
           onBpmChanged: (val) {
             setState(() => notesPerMinute = val);
             _saveBpm(val);
-            if (autoMode) _tickService.start(notesPerMinute);
+            if (autoMode) _tickService.updateBpm(notesPerMinute);
           },
         ),
         SizedBox(height: 20),
@@ -322,7 +322,7 @@ class _NoteGeneratorScreenState extends State<NoteGeneratorScreen> with SingleTi
             IconButton(
               iconSize: 40,
               onPressed: _manualTrigger,
-              icon: Icon(Icons.music_note, color: Colors.white),
+              icon: Icon(Icons.skip_next, color: Colors.white),
             ),
             IconButton(
               iconSize: 40,

@@ -13,6 +13,7 @@ class TickService {
   final ValueNotifier<int> bpmNotifier = ValueNotifier(60);
   final ValueNotifier<bool> isRunningNotifier = ValueNotifier(false);
 
+  int? _pendingBpm;
   Timer? _timer;
   Stopwatch? _stopwatch;
   int _bpm = 60;
@@ -27,7 +28,6 @@ class TickService {
     _interval = Duration(milliseconds: (60000 / bpm).round());
     _stopwatch = Stopwatch()..start();
 
-    // Delay the first tick until after isRunning == true has propagated
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _tickController.add(null);
     });
@@ -43,11 +43,30 @@ class TickService {
     _safeNotify(() => isRunningNotifier.value = false);
   }
 
+  void updateBpm(int newBpm) {
+    if (!isRunning || newBpm == _bpm || newBpm == _pendingBpm) return;
+    _pendingBpm = newBpm;
+  }
+
   void _scheduleNextTick() {
+    if (_stopwatch == null) return; // defensive check
+
     final now = _stopwatch!.elapsed;
     final msUntilNext = _interval.inMilliseconds - (now.inMilliseconds % _interval.inMilliseconds);
+
     _timer = Timer(Duration(milliseconds: msUntilNext), () {
       _tickController.add(null);
+
+      if (_pendingBpm != null) {
+        _bpm = _pendingBpm!;
+        _interval = Duration(milliseconds: (60000 / _bpm).round());
+        _safeNotify(() => bpmNotifier.value = _bpm);
+
+        _stopwatch?.stop();
+        _stopwatch = Stopwatch()..start();
+        _pendingBpm = null;
+      }
+
       _scheduleNextTick();
     });
   }
@@ -55,7 +74,6 @@ class TickService {
   int get bpm => _bpm;
   bool get isRunning => _timer != null;
 
-  /// Ensure notifier updates don’t break build/dispose cycles
   void _safeNotify(VoidCallback callback) {
     SchedulerBinding.instance.addPostFrameCallback((_) => callback());
   }

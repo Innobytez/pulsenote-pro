@@ -15,10 +15,8 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
   bool isRunning = false;
   bool soundOn = true;
   bool _prefsLoaded = false;
-
   late final TickService _tickService;
   StreamSubscription<void>? _tickSub;
-
   List<DateTime> tapTimes = [];
   Timer? _tapResetTimer;
 
@@ -90,7 +88,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
 
       setState(() => bpm = newBpm);
       _saveBpm(newBpm);
-      if (isRunning) _tickService.start(bpm);
+      if (isRunning) _tickService.updateBpm(bpm);
     }
 
     if (soundOn) AudioService.playClick();
@@ -122,7 +120,7 @@ Widget build(BuildContext context) {
               onBpmChanged: (val) {
                 setState(() => bpm = val);
                 _saveBpm(val);
-                if (isRunning) _tickService.start(bpm);
+                if (isRunning) _tickService.updateBpm(bpm);
               },
             ),
           ),
@@ -153,7 +151,7 @@ Widget build(BuildContext context) {
             IconButton(
               iconSize: 40.0,
               onPressed: _tapTempo,
-              icon: const Icon(Icons.music_note, color: Colors.white),
+              icon: Icon(Icons.touch_app, color: Colors.white),
             ),
           ],
         ),
