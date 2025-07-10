@@ -1,109 +1,115 @@
-import 'package:flutter_sound/flutter_sound.dart';
-import 'package:audio_session/audio_session.dart';
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter_soloud/flutter_soloud.dart';
+import 'package:path_provider/path_provider.dart';
 
 class AudioService {
-  static final FlutterSoundPlayer _player = FlutterSoundPlayer();
-  static bool _isInitialized = false;
-  static Uint8List? _clickBuffer;
-  static Uint8List? _silentBuffer;
+  static final SoLoud _soloud = SoLoud.instance;
+  static bool _initialized = false;
+  static late Directory _tempDir;
+  static final Map<String, AudioSource> _audioCache = {};
 
   static Future<void> _init() async {
-    if (_isInitialized) return;
+    if (_initialized) return;
+    await _soloud.init(bufferSize: 256);
+    _tempDir = Directory('${(await getTemporaryDirectory()).path}/pulsenote');
+    if (_tempDir.existsSync()) _tempDir.deleteSync(recursive: true);
+    _tempDir.createSync();
 
-    final session = await AudioSession.instance;
-    await session.configure(AudioSessionConfiguration.music());
+    await _prepareAndCache('click', _generateSineWaveWav(frequency: 1000, durationMs: 25, fadeOut: true));
+    await _prepareAndCache('silent', _generateSilentWav());
 
-    await _player.openPlayer();
-    _generateClickBuffer();
-    _generateSilentBuffer();
-    _isInitialized = true;
-  }
-
-  static void _generateClickBuffer() {
-    const sampleRate = 44100;
-    const durationMs = 25; // Shorter duration for a tighter click
-    final samples = (durationMs / 1000 * sampleRate).round();
-    const amplitude = 0.6; // Louder volume
-    const frequency = 1000.0;
-
-    final buffer = Int16List(samples);
-    for (int i = 0; i < samples; i++) {
-      final t = i / sampleRate;
-      final envelope = 1.0 - (i / samples); // Linear fade-out
-      final value = sin(2 * pi * frequency * t) * envelope;
-      buffer[i] = (value * amplitude * 32767).toInt();
+    for (final note in _noteFrequencies.keys) {
+      final freq = _noteFrequencies[note]!;
+      await _prepareAndCache('note_$note', _generateSineWaveWav(frequency: freq, durationMs: 300));
     }
 
-    _clickBuffer = Uint8List.view(buffer.buffer);
-  }
-
-  static void _generateSilentBuffer() {
-    const sampleRate = 44100;
-    const durationMs = 30;
-    final samples = (durationMs / 1000 * sampleRate).round();
-    final buffer = Int16List(samples); // silent = zeros
-    _silentBuffer = Uint8List.view(buffer.buffer);
+    _initialized = true;
   }
 
   static Future<void> warmUp() async {
     await _init();
-    await _player.startPlayer(
-      fromDataBuffer: _silentBuffer!,
-      codec: Codec.pcm16,
-      sampleRate: 44100,
-      numChannels: 1,
-      whenFinished: () async {
-        await _player.stopPlayer();
-      },
-    );
+    _soloud.play(_audioCache['silent']!);
   }
 
   static Future<void> playClick() async {
     await _init();
-    if (_player.isPlaying) await _player.stopPlayer();
-    await _player.startPlayer(
-      fromDataBuffer: _clickBuffer!,
-      codec: Codec.pcm16,
-      sampleRate: 44100,
-      numChannels: 1,
-    );
+    _soloud.play(_audioCache['click']!);
   }
 
   static Future<void> playNote(String note) async {
     await _init();
-    final freq = _noteFrequencies[note] ?? 440.0;
-
-    const sampleRate = 44100;
-    const durationMs = 300;
-    final samples = (durationMs / 1000 * sampleRate).round();
-    const amplitude = 0.6;
-
-    final buffer = Int16List(samples);
-    for (int i = 0; i < samples; i++) {
-      final t = i / sampleRate;
-      final envelope = 1.0 - (i / samples); // Linear fade-out
-      final value = sin(2 * pi * freq * t) * envelope;
-      buffer[i] = (value * amplitude * 32767).toInt();
-    }
-
-    final bytes = Uint8List.view(buffer.buffer);
-
-    if (_player.isPlaying) await _player.stopPlayer();
-
-    await _player.startPlayer(
-      fromDataBuffer: bytes,
-      codec: Codec.pcm16,
-      sampleRate: sampleRate,
-      numChannels: 1,
-    );
+    final src = _audioCache['note_$note'] ?? _audioCache['note_A']!;
+    _soloud.play(src);
   }
 
-  static final Map<String, double> _noteFrequencies = {
-    'C': 261.63, 'C#': 277.18, 'Db': 277.18, 'D': 293.66, 'D#': 311.13, 'Eb': 311.13,
-    'E': 329.63, 'Fb': 329.63, 'E#': 349.23, 'F': 349.23, 'F#': 369.99, 'Gb': 369.99,
-    'G': 392.00, 'G#': 415.30, 'Ab': 415.30, 'A': 440.00, 'A#': 466.16, 'Bb': 466.16,
+  static Future<void> _prepareAndCache(String name, Uint8List wavBytes) async {
+    final path = '${_tempDir.path}/$name.wav';
+    await File(path).writeAsBytes(wavBytes, flush: true);
+    _audioCache[name] = await _soloud.loadFile(path);
+  }
+
+  static Uint8List _generateSilentWav() {
+    const sr = 44100, dur = 30;
+    final samples = (sr * dur / 1000).round();
+    return _wrapWav(Uint8List.view(Int16List(samples).buffer), sr);
+  }
+
+  static Uint8List _generateSineWaveWav({
+    required double frequency,
+    required int durationMs,
+    double amplitude = 0.6,
+    bool fadeOut = true,
+  }) {
+    const sr = 44100;
+    final samples = (sr * durationMs / 1000).round();
+    final buffer = Int16List(samples);
+    for (var i = 0; i < samples; i++) {
+      final t = i / sr;
+      final env = fadeOut ? (1 - i / samples) : 1.0;
+      buffer[i] = (sin(2 * pi * frequency * t) * env * amplitude * 32767).toInt();
+    }
+    return _wrapWav(Uint8List.view(buffer.buffer), sr);
+  }
+
+  static Uint8List _wrapWav(Uint8List pcm, int sr) {
+    const ch = 1, bits = 16;
+    final br = sr * ch * bits ~/ 8;
+    final ba = ch * bits ~/ 8;
+    final dl = pcm.length;
+    final cs = 36 + dl;
+    final builder = BytesBuilder()
+      ..add(ascii.encode('RIFF'))
+      ..add(_i32LE(cs))
+      ..add(ascii.encode('WAVEfmt '))
+      ..add(_i32LE(16))
+      ..add(_i16LE(1))
+      ..add(_i16LE(ch))
+      ..add(_i32LE(sr))
+      ..add(_i32LE(br))
+      ..add(_i16LE(ba))
+      ..add(_i16LE(bits))
+      ..add(ascii.encode('data'))
+      ..add(_i32LE(dl))
+      ..add(pcm);
+    return builder.toBytes();
+  }
+
+  static List<int> _i16LE(int v) => [v & 0xFF, (v >> 8) & 0xFF];
+  static List<int> _i32LE(int v) => [
+    v & 0xFF,
+    (v >> 8) & 0xFF,
+    (v >> 16) & 0xFF,
+    (v >> 24) & 0xFF,
+  ];
+
+  static final _noteFrequencies = <String, double>{
+    'C': 261.63, 'C#': 277.18, 'Db': 277.18, 'D': 293.66,
+    'D#': 311.13, 'Eb': 311.13, 'E': 329.63, 'F': 349.23,
+    'F#': 369.99, 'Gb': 369.99, 'G': 392.00, 'G#': 415.30,
+    'Ab': 415.30, 'A': 440.00, 'A#': 466.16, 'Bb': 466.16,
     'B': 493.88, 'Cb': 493.88, 'B#': 523.25,
   };
 }

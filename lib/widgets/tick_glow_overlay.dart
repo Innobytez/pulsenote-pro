@@ -15,6 +15,8 @@ class _TickGlowOverlayState extends State<TickGlowOverlay> with SingleTickerProv
   late final StreamSubscription<void> _tickSub;
   bool _hasStarted = false;
 
+  static const _visualDelay = Duration(milliseconds: 80); // Match SoLoud latency
+
   Duration get _fadeDuration {
     final bpm = TickService().bpm;
     final tickMs = (60000 / bpm).round();
@@ -32,9 +34,12 @@ class _TickGlowOverlayState extends State<TickGlowOverlay> with SingleTickerProv
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
 
     _tickSub = TickService().tickStream.listen((_) {
-      setState(() => _hasStarted = true);
-      _controller.duration = _fadeDuration;
-      _controller.forward(from: 0.0);
+      Future.delayed(_visualDelay, () {
+        if (!mounted) return;
+        setState(() => _hasStarted = true);
+        _controller.duration = _fadeDuration;
+        _controller.forward(from: 0.0);
+      });
     });
   }
 
@@ -80,28 +85,21 @@ class _TickGlowOverlayState extends State<TickGlowOverlay> with SingleTickerProv
           animation: _fade,
           builder: (_, __) => Stack(
             children: [
-              // Top glow (50% wide, above screen)
               _glowBar(
                 alignment: Alignment.topCenter,
                 offset: const Offset(0, -40),
                 size: Size(screenWidth * 0.5, 2),
               ),
-
-              // Bottom glow (50% wide, below screen)
               _glowBar(
                 alignment: Alignment.bottomCenter,
                 offset: const Offset(0, 40),
                 size: Size(screenWidth * 0.5, 2),
               ),
-
-              // Left glow (50% tall, offscreen left)
               _glowBar(
                 alignment: Alignment.centerLeft,
                 offset: const Offset(-40, 0),
                 size: Size(2, screenHeight * 0.5),
               ),
-
-              // Right glow (50% tall, offscreen right)
               _glowBar(
                 alignment: Alignment.centerRight,
                 offset: const Offset(40, 0),

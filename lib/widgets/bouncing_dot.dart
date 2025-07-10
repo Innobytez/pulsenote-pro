@@ -55,16 +55,22 @@ class _BouncingDotState extends State<BouncingDot> {
     final tickMs = (60000 / widget.bpm).round();
     return Duration(milliseconds: (tickMs * 0.9).round());
   }
+
   Duration get _pulseDuration => const Duration(milliseconds: 100);
+  static const _visualDelay = Duration(milliseconds: 80); // Compensate for audio latency
 
   @override
   void initState() {
     super.initState();
     _state = _DotStateStore().get(widget.side);
-    _tickSub = TickService().tickStream.listen((_) => _onTick());
+    _tickSub = TickService().tickStream.listen((_) {
+      Future.delayed(_visualDelay, _onTick);
+    });
   }
 
   void _onTick() {
+    if (!mounted) return;
+
     setState(() {
       _state.topOffset = (_state.topOffset == 0.15) ? 0.85 : 0.15;
       _state.pulsing = true;
