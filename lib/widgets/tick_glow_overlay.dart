@@ -15,7 +15,7 @@ class _TickGlowOverlayState extends State<TickGlowOverlay> with SingleTickerProv
   late final StreamSubscription<void> _tickSub;
   bool _hasStarted = false;
 
-  static const _visualDelay = Duration(milliseconds: 80); // Match SoLoud latency
+  static const _visualDelay = Duration(milliseconds: 0); // Match SoLoud latency
 
   Duration get _fadeDuration {
     final bpm = TickService().bpm;

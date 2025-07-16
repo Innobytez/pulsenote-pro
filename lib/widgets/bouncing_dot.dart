@@ -39,8 +39,8 @@ class _DotStateStore {
   _DotStateStore._internal();
 
   final Map<DotSide, _DotState> _states = {
-    DotSide.left: _DotState(tickCount: 0, topOffset: 0.15, pulsing: false),
-    DotSide.right: _DotState(tickCount: 0, topOffset: 0.85, pulsing: false),
+    DotSide.left: _DotState(tickCount: 0, topOffset: 0.45, pulsing: false),
+    DotSide.right: _DotState(tickCount: 0, topOffset: 0.77, pulsing: false),
   };
 
   _DotState get(DotSide side) => _states[side]!;
@@ -57,7 +57,7 @@ class _BouncingDotState extends State<BouncingDot> {
   }
 
   Duration get _pulseDuration => const Duration(milliseconds: 100);
-  static const _visualDelay = Duration(milliseconds: 80); // Compensate for audio latency
+  static const _visualDelay = Duration(milliseconds: 0); // Compensate for audio latency
 
   @override
   void initState() {
@@ -72,7 +72,7 @@ class _BouncingDotState extends State<BouncingDot> {
     if (!mounted) return;
 
     setState(() {
-      _state.topOffset = (_state.topOffset == 0.15) ? 0.85 : 0.15;
+      _state.topOffset = (_state.topOffset == 0.45) ? 0.77 : 0.45;
       _state.pulsing = true;
     });
     _DotStateStore().update(widget.side, _state);
@@ -89,11 +89,11 @@ class _BouncingDotState extends State<BouncingDot> {
   void didUpdateWidget(covariant BouncingDot oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.isRunning && oldWidget.isRunning) {
-      final distanceToTop = (_state.topOffset - 0.15).abs();
-      final distanceToBottom = (_state.topOffset - 0.85).abs();
+      final distanceToTop = (_state.topOffset - 0.45).abs();
+      final distanceToBottom = (_state.topOffset - 0.77).abs();
 
       setState(() {
-        _state.topOffset = (distanceToTop < distanceToBottom) ? 0.15 : 0.85;
+        _state.topOffset = (distanceToTop < distanceToBottom) ? 0.45 : 0.77;
         _state.pulsing = false;
       });
       _DotStateStore().update(widget.side, _state);

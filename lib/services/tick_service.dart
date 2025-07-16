@@ -2,15 +2,24 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
+/// Provides precise sub-beat and crotchet ticks using a drift-corrected Stopwatch + Timer.
 class TickService {
   static final TickService _instance = TickService._internal();
   factory TickService() => _instance;
   TickService._internal();
 
-  final StreamController<void> _tickController = StreamController.broadcast();
-  Stream<void> get tickStream => _tickController.stream;
+  /// Stream of crotchet (full-beat) ticks.
+  final StreamController<void> _crotchetController = StreamController.broadcast();
+  Stream<void> get tickStream => _crotchetController.stream;
 
+  /// Stream of sub-beat ticks (e.g. subdivided beats).
+  final StreamController<void> _subController = StreamController.broadcast();
+  Stream<void> get subTickStream => _subController.stream;
+
+  /// Notifies listeners of the current BPM.
   final ValueNotifier<int> bpmNotifier = ValueNotifier(60);
+
+  /// Notifies whether the service is running.
   final ValueNotifier<bool> isRunningNotifier = ValueNotifier(false);
 
   int? _pendingBpm;
@@ -19,28 +28,34 @@ class TickService {
   int _bpm = 60;
   Duration _interval = Duration(milliseconds: 1000);
 
-  DateTime? _lastTickTime;
-  int _tickCount = 0;
+  int _subTickCount = 0;
+  int _ticksPerCrotchet = 1;
 
-  void start(int bpm) {
+  /// Starts ticking at [bpm], subdividing each beat by [unitFraction].
+  void start(int bpm, { double unitFraction = 1.0 }) {
     stop();
     _bpm = bpm;
-    _interval = Duration(milliseconds: (60000 / bpm).round());
+    _ticksPerCrotchet = (1 / unitFraction).round();
+    _interval = Duration(milliseconds: (60000 / bpm * unitFraction).round());
     _safeNotify(() => bpmNotifier.value = bpm);
     _safeNotify(() => isRunningNotifier.value = true);
 
+    // 1) start the stopwatch
     _stopwatch = Stopwatch()..start();
-    _tickCount = 0;
 
-    // Emit tick 1 immediately, not post-frame
-    final now = DateTime.now();
-    _lastTickTime = now;
-    debugPrint('[TICK] First tick at ${now.toIso8601String()}');
-    _tickController.add(null);
+    // 2) fire the very first tick immediately
+    _emitTick();
 
-    _scheduleNextTick(); // align tick 2+
+    // 3) reset the timer base and counter so that
+    //    the *next* tick comes in exactly one interval
+    _stopwatch!.reset();      // zero out elapsed
+    _subTickCount = 0;        // zero out count
+
+    // 4) schedule the subsequent ticks normally
+    _scheduleNextTick();
   }
 
+  /// Stops any scheduled ticks and resets state.
   void stop() {
     _timer?.cancel();
     _timer = null;
@@ -49,6 +64,7 @@ class TickService {
     _safeNotify(() => isRunningNotifier.value = false);
   }
 
+  /// Requests a BPM change on the next tick.
   void updateBpm(int newBpm) {
     if (!isRunning || newBpm == _bpm || newBpm == _pendingBpm) return;
     _pendingBpm = newBpm;
@@ -56,57 +72,49 @@ class TickService {
 
   void _scheduleNextTick() {
     if (_stopwatch == null) return;
+    final target = _interval * (_subTickCount + 1);
+    final delay = target - _stopwatch!.elapsed;
+    _timer = Timer(
+      delay.isNegative ? Duration.zero : delay,
+      () {
+        _emitTick();
 
-    final targetElapsed = _interval * (_tickCount + 1);
-    final delay = targetElapsed - _stopwatch!.elapsed;
+        // Handle pending BPM change exactly at a crotchet boundary.
+        if (_pendingBpm != null) {
+          _bpm = _pendingBpm!;
+          _interval = Duration(milliseconds: (60000 / _bpm * (1 / _ticksPerCrotchet)).round());
+          _pendingBpm = null;
+          _safeNotify(() => bpmNotifier.value = _bpm);
+          _stopwatch!..stop()..reset()..start();
+          _subTickCount = 0;
+          _crotchetController.add(null);
+        }
 
-    _timer = Timer(delay.isNegative ? Duration.zero : delay, () {
-      _emitTick();
-
-      if (_pendingBpm != null) {
-        _bpm = _pendingBpm!;
-        _interval = Duration(milliseconds: (60000 / _bpm).round());
-        _safeNotify(() => bpmNotifier.value = _bpm);
-        _pendingBpm = null;
-
-        _stopwatch?.stop();
-        _stopwatch = Stopwatch()..start();
-        _tickCount = 0;
-
-        final now = DateTime.now();
-        _lastTickTime = now;
-        debugPrint('[TICK] First tick at ${now.toIso8601String()}');
-        _tickController.add(null);
-
-        _scheduleNextTick(); // restart cleanly
-        return;
-      }
-
-      _scheduleNextTick();
-    });
+        // Schedule the next tick.
+        _scheduleNextTick();
+      },
+    );
   }
 
   void _emitTick() {
-    final now = DateTime.now();
-    if (_lastTickTime != null) {
-      final delta = now.difference(_lastTickTime!).inMilliseconds;
-      final expected = _interval.inMilliseconds;
-      final deviation = delta - expected;
-      debugPrint('[TICK] Δ = ${delta} ms | expected = $expected ms | deviation = ${deviation >= 0 ? '+' : ''}$deviation ms (tick $_tickCount)', wrapWidth: 1024);
-    } else {
-      debugPrint('[TICK] First tick at ${now.toIso8601String()}', wrapWidth: 1024);
+
+    // Fire sub-beat tick.
+    _subController.add(null);
+    _subTickCount++;
+
+    // Fire crotchet tick every N sub-ticks.
+    if (_subTickCount % _ticksPerCrotchet == 0) {
+      _crotchetController.add(null);
     }
-
-    _lastTickTime = now;
-    _tickCount++;
-
-    _tickController.add(null);
   }
 
+  /// Returns the current BPM.
   int get bpm => _bpm;
+
+  /// Returns true if the service is actively running.
   bool get isRunning => _stopwatch?.isRunning ?? false;
 
-  void _safeNotify(VoidCallback callback) {
-    SchedulerBinding.instance.addPostFrameCallback((_) => callback());
+  void _safeNotify(VoidCallback cb) {
+    SchedulerBinding.instance.addPostFrameCallback((_) => cb());
   }
 }

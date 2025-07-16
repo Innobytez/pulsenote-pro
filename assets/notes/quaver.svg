@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://web.resource.org/cc/"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="75"
+   height="150"
+   id="svg2"
+   sodipodi:version="0.32"
+   inkscape:version="0.45.1"
+   sodipodi:docbase="C:\Documents and Settings\Mattias\Desktop"
+   sodipodi:docname="1-8_note_quaver_(music).svg"
+   inkscape:output_extension="org.inkscape.output.svg.inkscape"
+   version="1.0">
+  
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     gridtolerance="10000"
+     guidetolerance="10"
+     objecttolerance="10"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="2.52"
+     inkscape:cx="37.5"
+     inkscape:cy="75"
+     inkscape:document-units="px"
+     inkscape:current-layer="layer1"
+     inkscape:window-width="765"
+     inkscape:window-height="579"
+     inkscape:window-x="1711"
+     inkscape:window-y="365" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <g
+       id="g4290"
+       transform="translate(-324.68272,-449.98894)">
+      <path
+         id="text2160"
+         style="font-size:144px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:100%;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+         d="M 359.17477,474.31662 L 358.61227,474.81662 L 358.61227,561.81662 L 358.61227,561.84787 L 359.04977,562.59787 L 365.54977,562.09787 L 365.86227,561.81662 L 365.86227,523.72287 L 365.86227,491.12912 L 365.86227,477.56662 L 365.86227,474.81662 L 365.29977,474.31662 L 359.17477,474.31662 z " />
+      <path
+         id="rect2169"
+         style="color:#000000;fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1.5;stroke-linecap:butt;stroke-linejoin:miter;marker:none;marker-start:none;marker-mid:none;marker-end:none;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;visibility:visible;display:inline;overflow:visible"
+         d="M 365.86227,477.56662 L 365.86227,491.12912 C 367.03409,492.34796 369.76847,493.94171 374.08102,495.91037 C 384.76845,499.23858 390.1122,502.53545 390.11227,505.81662 C 390.1122,509.75419 388.69032,512.86356 385.83102,515.16037 L 387.92477,517.41037 L 388.20602,517.41037 C 393.9247,512.91043 396.79969,507.25419 396.79977,500.41037 C 396.79969,493.94171 391.17469,489.06671 379.92477,485.78537 C 371.81534,482.83234 367.12784,480.09797 365.86227,477.56662 z " />
+      <path
+         id="path3142"
+         style="font-size:144px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:100%;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+         d="M 343.98727,557.34787 C 334.04975,558.42601 329.08101,562.05101 329.08102,568.19162 C 329.08101,576.06663 334.76851,580.00412 346.11227,580.00412 L 350.11227,580.00412 C 360.61222,577.89475 365.86222,573.2385 365.86227,566.06662 L 365.86227,561.84787 L 358.61227,561.84787 C 354.44036,558.84789 350.11223,557.34789 345.61227,557.34787 L 343.98727,557.34787 z " />
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://web.resource.org/cc/"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="75"
+   height="150"
+   id="svg2"
+   sodipodi:version="0.32"
+   inkscape:version="0.45.1"
+   sodipodi:docbase="C:\Documents and Settings\Mattias\Desktop"
+   sodipodi:docname="1-16_note_semiquaver_(music).svg"
+   inkscape:output_extension="org.inkscape.output.svg.inkscape"
+   version="1.0">
+  
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     gridtolerance="10000"
+     guidetolerance="10"
+     objecttolerance="10"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="2.52"
+     inkscape:cx="37.5"
+     inkscape:cy="75"
+     inkscape:document-units="px"
+     inkscape:current-layer="layer1"
+     inkscape:window-width="765"
+     inkscape:window-height="579"
+     inkscape:window-x="1711"
+     inkscape:window-y="365" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <g
+       id="g4284"
+       transform="translate(-398.60174,-451.6459)">
+      <path
+         id="path2276"
+         style="color:#000000;fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1.5;stroke-linecap:butt;stroke-linejoin:miter;marker:none;marker-start:none;marker-mid:none;marker-end:none;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;visibility:visible;display:inline;overflow:visible"
+         d="M 438.95814,506.52608 L 438.95814,520.08858 C 440.12996,521.30742 442.86434,522.90117 447.17689,524.86983 C 457.86432,528.19804 463.20807,531.49491 463.20814,534.77608 C 463.20807,538.71365 461.78619,541.82302 458.92689,544.11983 L 461.02064,546.36983 L 461.30189,546.36983 C 467.02057,541.86989 469.89556,536.21365 469.89564,529.36983 C 469.89556,522.90117 464.27056,518.02617 453.02064,514.74483 C 444.91121,511.7918 440.22371,509.05743 438.95814,506.52608 z " />
+      <path
+         id="path2280"
+         style="font-size:144px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:100%;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+         d="M 432.27064,476.09927 L 431.70814,476.59927 L 431.70814,563.59927 L 431.70814,563.63052 L 432.14564,564.38052 L 438.64564,563.88052 L 438.95814,563.59927 L 438.95814,525.50552 L 438.95814,492.91177 L 438.95814,479.34927 L 438.95814,476.59927 L 438.39564,476.09927 L 432.27064,476.09927 z " />
+      <path
+         id="path2282"
+         style="color:#000000;fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1.5;stroke-linecap:butt;stroke-linejoin:miter;marker:none;marker-start:none;marker-mid:none;marker-end:none;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;visibility:visible;display:inline;overflow:visible"
+         d="M 438.95814,479.34927 L 438.95814,492.91177 C 440.12996,494.13061 442.86434,495.72436 447.17689,497.69302 C 457.86432,501.02123 463.20807,504.3181 463.20814,507.59927 C 463.20807,511.53684 461.78619,514.64621 458.92689,516.94302 L 461.02064,519.19302 L 461.30189,519.19302 C 467.02057,514.69308 469.89556,509.03684 469.89564,502.19302 C 469.89556,495.72436 464.27056,490.84936 453.02064,487.56802 C 444.91121,484.61499 440.22371,481.88062 438.95814,479.34927 z " />
+      <path
+         id="path2284"
+         style="font-size:144px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:100%;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+         d="M 417.08314,559.13052 C 407.14562,560.20866 402.17688,563.83366 402.17689,569.97427 C 402.17688,577.84928 407.86438,581.78677 419.20814,581.78677 L 423.20814,581.78677 C 433.70809,579.6774 438.95809,575.02115 438.95814,567.84927 L 438.95814,563.63052 L 431.70814,563.63052 C 427.53623,560.63054 423.2081,559.13054 418.70814,559.13052 L 417.08314,559.13052 z " />
+    </g>
+  </g>
+</svg>
