@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/audio_service.dart';
 import '../services/tick_service.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'dart:ui';
 
 // ─── ENUMS AND EXTENSIONS ─────────────────────────────────────────────
 
@@ -80,17 +81,20 @@ class TimeSignature {
 class MetronomeStep {
   RhythmType rhythm;
   bool isMuted;
+  bool isAccented;
 
-  MetronomeStep({required this.rhythm, this.isMuted = false});
+  MetronomeStep({required this.rhythm, this.isMuted = false, this.isAccented = false});
 
   Map<String, dynamic> toJson() => {
         'rhythm': rhythm.name,
         'isMuted': isMuted,
+        'isAccented': isAccented,
       };
 
   factory MetronomeStep.fromJson(Map<String, dynamic> json) => MetronomeStep(
         rhythm: RhythmType.values.firstWhere((e) => e.name == json['rhythm']),
         isMuted: json['isMuted'] ?? false,
+        isAccented: json['isAccented'] ?? false,
       );
 }
 
@@ -332,7 +336,7 @@ class MetronomeSequencerService {
       for (int s = 0; s < _bars[b].steps.length; s++) {
         final step = _bars[b].steps[s];
         final int length = (step.rhythm.durationInBeats * ticksPerBeat).round();
-        out.add(_StepTime(b, s, cursor, length, step.isMuted));
+        out.add(_StepTime(b, s, cursor, length, step.isMuted, step.isAccented));
         cursor += length;
       }
     }
@@ -342,16 +346,31 @@ class MetronomeSequencerService {
 
   /// Called on every sub‐beat tick
   void _onTick() {
+    // wrap around at end of cycle
     if (_currentTick >= _totalTicksPerCycle) {
       _currentTick = 0;
-      _barEndController.add(null);             // <— signal end of cycle
+      _barEndController.add(null);  // signal end of cycle
     }
+
     for (final step in _schedule) {
       if (step.startTick == _currentTick) {
+        // update indices
         _currentBarIndex = step.barIndex;
         _currentStepIndex = step.stepIndex;
-        if (!step.isMuted && _soundOn) AudioService.playClick();
-        _updateController.add(null);           // UI step update
+
+        // fetch the live MetronomeStep so toggles take effect immediately
+        final liveStep = _bars[step.barIndex].steps[step.stepIndex];
+
+        if (!liveStep.isMuted && _soundOn) {
+          if (liveStep.isAccented) {
+            AudioService.playAccentClick();
+          } else {
+            AudioService.playClick();
+          }
+        }
+
+        // trigger UI update
+        _updateController.add(null);
       }
     }
     _currentTick++;
@@ -426,6 +445,7 @@ class _StepTime {
   final int startTick;       // absolute tick when this step begins
   final int durationTicks;   // how many ticks this step lasts
   final bool isMuted;
+  final bool isAccented;
 
   _StepTime(
     this.barIndex,
@@ -433,6 +453,7 @@ class _StepTime {
     this.startTick,
     this.durationTicks,
     this.isMuted,
+    this.isAccented
   );
 }
 
@@ -797,7 +818,9 @@ Widget _buildBar(int barIndex) {
                               animation: _scaleAnim,
                               builder: (ctx, child) {
                                 final scale = isActive ? _scaleAnim.value : 1.0;
-                                final fillColor = isActive ? Colors.tealAccent : noteColor;
+                                final fillColor = step.isMuted
+                                    ? noteColor
+                                    : (isActive ? Colors.tealAccent : noteColor);
 
                                 return Align(
                                   alignment: Alignment.centerLeft,  // forces left alignment
@@ -847,10 +870,30 @@ Widget _buildBar(int barIndex) {
                                       Transform.scale(
                                         scale: step.isMuted ? 1.0 : scale,
                                         alignment: Alignment.centerLeft,
-                                        child: SvgPicture.asset(
-                                          step.rhythm.assetPath,
-                                          height:42,
-                                          colorFilter: ColorFilter.mode(fillColor, BlendMode.srcIn),
+                                        child: Stack(
+                                          alignment: Alignment.center,
+                                          children: [
+                                            if (step.isAccented)
+                                              ImageFiltered(
+                                                imageFilter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                                                child: SvgPicture.asset(
+                                                  step.rhythm.assetPath,
+                                                  height: 42,
+                                                  colorFilter: ColorFilter.mode(
+                                                    // use the same accent color you want: teal, grey, or white
+                                                    isActive 
+                                                      ? Colors.tealAccent 
+                                                      : Colors.white.withOpacity(0.8),
+                                                    BlendMode.srcIn,
+                                                  ),
+                                                ),
+                                              ),
+                                            SvgPicture.asset(
+                                              step.rhythm.assetPath,
+                                              height: 42,
+                                              colorFilter: ColorFilter.mode(fillColor, BlendMode.srcIn),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ],
@@ -907,6 +950,22 @@ Widget _buildEditorPanel() {
                   setState(() {
                     step!.isMuted = !step.isMuted;
                     sequencer.reset();
+                  });
+                }
+              : null,
+        ),
+        // Accent toggle button
+        IconButton(
+          icon: Icon(
+            Icons.chevron_right,
+            color: isActive 
+                ? (step!.isAccented ? Colors.tealAccent : Colors.white)
+                : Colors.grey,
+          ),
+          onPressed: isActive
+              ? () {
+                  setState(() {
+                    step!.isAccented = !step.isAccented;
                   });
                 }
               : null,

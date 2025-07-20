@@ -20,7 +20,7 @@ class AudioService {
 
     await _prepareAndCache('click', _generateSineWaveWav(frequency: 1000, durationMs: 25, fadeOut: true));
     await _prepareAndCache('silent', _generateSilentWav());
-
+    await _prepareAndCache('accent_click', _generateSineWaveWav(frequency: 1500, durationMs: 25, amplitude: 1.0, fadeOut: true));
     for (final note in _noteFrequencies.keys) {
       final freq = _noteFrequencies[note]!;
       await _prepareAndCache('note_$note', _generateSineWaveWav(frequency: freq, durationMs: 300));
@@ -37,6 +37,11 @@ class AudioService {
   static Future<void> playClick() async {
     await _init();
     _soloud.play(_audioCache['click']!);
+  }
+
+  static Future<void> playAccentClick() async {
+    await _init();
+    _soloud.play(_audioCache['accent_click']!);
   }
 
   static Future<void> playNote(String note) async {
