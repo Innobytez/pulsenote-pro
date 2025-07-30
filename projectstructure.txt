@@ -25,300 +25,54 @@
 │   ├── pulsenote_android.iml
 │   └── settings.gradle.kts
 ├── assets
-│   └── icon
-│       └── PN_android_icon.png
+│   ├── fonts
+│   │   └── NotoMusic-Regular.ttf
+│   ├── icon
+│   │   └── PN_android_icon.png
+│   └── notes
+│       ├── crotchet.svg
+│       ├── minim.svg
+│       ├── quaver.svg
+│       ├── semibreve.svg
+│       └── semiquaver.svg
 ├── build
-│   ├── 25095579c4ae4a2233912ac9ecb16425
+│   ├── 56752939e0e44e03bd10baa02e377a8e
 │   │   ├── _composite.stamp
 │   │   ├── gen_dart_plugin_registrant.stamp
 │   │   └── gen_localizations.stamp
-│   ├── 5ed1ec56e46357ec5ad2faed02821e03.cache.dill.track.dill
-│   ├── app
-│   │   ├── generated
-│   │   │   ├── ap_generated_sources
-│   │   │   └── res
-│   │   ├── intermediates
-│   │   │   ├── aar_metadata_check
-│   │   │   ├── annotation_processor_list
-│   │   │   ├── apk_ide_redirect_file
-│   │   │   ├── app_metadata
-│   │   │   ├── assets
-│   │   │   ├── compatible_screen_manifest
-│   │   │   ├── compile_and_runtime_not_namespaced_r_class_jar
-│   │   │   ├── compressed_assets
-│   │   │   ├── cxx
-│   │   │   ├── data_binding_layout_info_type_merge
-│   │   │   ├── data_binding_layout_info_type_package
-│   │   │   ├── desugar_graph
-│   │   │   ├── dex
-│   │   │   ├── dex_archive_input_jar_hashes
-│   │   │   ├── dex_number_of_buckets_file
-│   │   │   ├── duplicate_classes_check
-│   │   │   ├── external_file_lib_dex_archives
-│   │   │   ├── external_libs_dex_archive
-│   │   │   ├── external_libs_dex_archive_with_artifact_transforms
-│   │   │   ├── flutter
-│   │   │   ├── incremental
-│   │   │   ├── java_res
-│   │   │   ├── javac
-│   │   │   ├── linked_resources_binary_format
-│   │   │   ├── local_only_symbol_list
-│   │   │   ├── manifest_merge_blame_file
-│   │   │   ├── merged_java_res
-│   │   │   ├── merged_jni_libs
-│   │   │   ├── merged_manifest
-│   │   │   ├── merged_manifests
-│   │   │   ├── merged_native_libs
-│   │   │   ├── merged_res
-│   │   │   ├── merged_res_blame_folder
-│   │   │   ├── merged_shaders
-│   │   │   ├── merged_test_only_native_libs
-│   │   │   ├── mixed_scope_dex_archive
-│   │   │   ├── navigation_json
-│   │   │   ├── nested_resources_validation_report
-│   │   │   ├── packaged_manifests
-│   │   │   ├── packaged_res
-│   │   │   ├── project_dex_archive
-│   │   │   ├── runtime_symbol_list
-│   │   │   ├── signing_config_versions
-│   │   │   ├── source_set_path_map
-│   │   │   ├── stable_resource_ids_file
-│   │   │   ├── stripped_native_libs
-│   │   │   ├── sub_project_dex_archive
-│   │   │   ├── symbol_list_with_package_name
-│   │   │   └── validate_signing_config
-│   │   ├── kotlin
-│   │   │   └── compileDebugKotlin
-│   │   ├── outputs
-│   │   │   ├── apk
-│   │   │   ├── flutter-apk
-│   │   │   └── logs
-│   │   └── tmp
-│   │       ├── compileDebugJavaWithJavac
-│   │       ├── kotlin-classes
-│   │       └── packJniLibsflutterBuildDebug
-│   ├── audio_session
-│   │   ├── generated
-│   │   │   └── res
-│   │   ├── intermediates
-│   │   │   ├── aapt_friendly_merged_manifests
-│   │   │   ├── aar_libs_directory
-│   │   │   ├── aar_main_jar
-│   │   │   ├── aar_metadata
-│   │   │   ├── annotation_processor_list
-│   │   │   ├── annotations_typedef_file
-│   │   │   ├── annotations_zip
-│   │   │   ├── compile_library_classes_jar
-│   │   │   ├── compile_r_class_jar
-│   │   │   ├── compile_symbol_list
-│   │   │   ├── compiled_local_resources
-│   │   │   ├── data_binding_layout_info_type_package
-│   │   │   ├── generated_proguard_file
-│   │   │   ├── incremental
-│   │   │   ├── java_res
-│   │   │   ├── library_and_local_jars_jni
-│   │   │   ├── library_art_profile
-│   │   │   ├── library_assets
-│   │   │   ├── library_jni
-│   │   │   ├── lint_publish_jar
-│   │   │   ├── local_only_symbol_list
-│   │   │   ├── manifest_merge_blame_file
-│   │   │   ├── merged_consumer_proguard_file
-│   │   │   ├── merged_java_res
-│   │   │   ├── merged_jni_libs
-│   │   │   ├── merged_manifest
-│   │   │   ├── merged_shaders
-│   │   │   ├── navigation_json
-│   │   │   ├── navigation_json_for_aar
-│   │   │   ├── nested_resources_validation_report
-│   │   │   ├── packaged_res
-│   │   │   ├── public_res
-│   │   │   ├── runtime_library_classes_dir
-│   │   │   └── symbol_list_with_package_name
-│   │   ├── kotlin
-│   │   │   └── compileDebugKotlin
-│   │   ├── outputs
-│   │   │   ├── aar
-│   │   │   └── logs
-│   │   └── tmp
-│   │       └── kotlin-classes
-│   ├── flutter_native_splash
-│   │   ├── generated
-│   │   │   ├── ap_generated_sources
-│   │   │   └── res
-│   │   ├── intermediates
-│   │   │   ├── aapt_friendly_merged_manifests
-│   │   │   ├── aar_libs_directory
-│   │   │   ├── aar_main_jar
-│   │   │   ├── aar_metadata
-│   │   │   ├── annotation_processor_list
-│   │   │   ├── annotations_typedef_file
-│   │   │   ├── annotations_zip
-│   │   │   ├── compile_library_classes_jar
-│   │   │   ├── compile_r_class_jar
-│   │   │   ├── compile_symbol_list
-│   │   │   ├── compiled_local_resources
-│   │   │   ├── data_binding_layout_info_type_package
-│   │   │   ├── generated_proguard_file
-│   │   │   ├── incremental
-│   │   │   ├── javac
-│   │   │   ├── library_and_local_jars_jni
-│   │   │   ├── library_art_profile
-│   │   │   ├── library_assets
-│   │   │   ├── library_jni
-│   │   │   ├── lint_publish_jar
-│   │   │   ├── local_only_symbol_list
-│   │   │   ├── manifest_merge_blame_file
-│   │   │   ├── merged_consumer_proguard_file
-│   │   │   ├── merged_java_res
-│   │   │   ├── merged_jni_libs
-│   │   │   ├── merged_manifest
-│   │   │   ├── merged_shaders
-│   │   │   ├── navigation_json
-│   │   │   ├── navigation_json_for_aar
-│   │   │   ├── nested_resources_validation_report
-│   │   │   ├── packaged_res
-│   │   │   ├── public_res
-│   │   │   ├── runtime_library_classes_dir
-│   │   │   └── symbol_list_with_package_name
-│   │   ├── outputs
-│   │   │   ├── aar
-│   │   │   └── logs
-│   │   └── tmp
-│   │       └── compileDebugJavaWithJavac
-│   ├── flutter_sound
-│   │   ├── generated
-│   │   │   ├── ap_generated_sources
-│   │   │   └── res
-│   │   ├── intermediates
-│   │   │   ├── aapt_friendly_merged_manifests
-│   │   │   ├── aar_libs_directory
-│   │   │   ├── aar_main_jar
-│   │   │   ├── aar_metadata
-│   │   │   ├── annotation_processor_list
-│   │   │   ├── annotations_typedef_file
-│   │   │   ├── annotations_zip
-│   │   │   ├── compile_library_classes_jar
-│   │   │   ├── compile_r_class_jar
-│   │   │   ├── compile_symbol_list
-│   │   │   ├── compiled_local_resources
-│   │   │   ├── data_binding_layout_info_type_package
-│   │   │   ├── incremental
-│   │   │   ├── javac
-│   │   │   ├── library_and_local_jars_jni
-│   │   │   ├── library_assets
-│   │   │   ├── library_jni
-│   │   │   ├── local_only_symbol_list
-│   │   │   ├── manifest_merge_blame_file
-│   │   │   ├── merged_java_res
-│   │   │   ├── merged_jni_libs
-│   │   │   ├── merged_manifest
-│   │   │   ├── merged_shaders
-│   │   │   ├── navigation_json
-│   │   │   ├── nested_resources_validation_report
-│   │   │   ├── packaged_res
-│   │   │   ├── public_res
-│   │   │   ├── runtime_library_classes_dir
-│   │   │   └── symbol_list_with_package_name
-│   │   ├── outputs
-│   │   │   ├── aar
-│   │   │   └── logs
-│   │   └── tmp
-│   │       └── compileDebugJavaWithJavac
+│   ├── 5f26809536b1c6a3797b573eb72ac672.cache.dill.track.dill
 │   ├── ios
-│   │   └── XCBuildData
-│   │       └── PIFCache
-│   ├── native_assets
-│   │   └── android
-│   ├── path_provider_android
-│   │   ├── generated
-│   │   │   ├── ap_generated_sources
-│   │   │   └── res
-│   │   ├── intermediates
-│   │   │   ├── aapt_friendly_merged_manifests
-│   │   │   ├── aar_libs_directory
-│   │   │   ├── aar_main_jar
-│   │   │   ├── aar_metadata
-│   │   │   ├── annotation_processor_list
-│   │   │   ├── annotations_typedef_file
-│   │   │   ├── annotations_zip
-│   │   │   ├── compile_library_classes_jar
-│   │   │   ├── compile_r_class_jar
-│   │   │   ├── compile_symbol_list
-│   │   │   ├── compiled_local_resources
-│   │   │   ├── data_binding_layout_info_type_package
-│   │   │   ├── incremental
-│   │   │   ├── javac
-│   │   │   ├── library_and_local_jars_jni
-│   │   │   ├── library_assets
-│   │   │   ├── library_jni
-│   │   │   ├── local_only_symbol_list
-│   │   │   ├── manifest_merge_blame_file
-│   │   │   ├── merged_java_res
-│   │   │   ├── merged_jni_libs
-│   │   │   ├── merged_manifest
-│   │   │   ├── merged_shaders
-│   │   │   ├── navigation_json
-│   │   │   ├── nested_resources_validation_report
-│   │   │   ├── packaged_res
-│   │   │   ├── public_res
-│   │   │   ├── runtime_library_classes_dir
-│   │   │   └── symbol_list_with_package_name
-│   │   ├── outputs
-│   │   │   ├── aar
-│   │   │   └── logs
-│   │   └── tmp
-│   │       └── compileDebugJavaWithJavac
-│   ├── reports
-│   │   └── problems
-│   │       └── problems-report.html
-│   └── shared_preferences_android
-│       ├── generated
-│       │   ├── ap_generated_sources
-│       │   └── res
-│       ├── intermediates
-│       │   ├── aapt_friendly_merged_manifests
-│       │   ├── aar_libs_directory
-│       │   ├── aar_main_jar
-│       │   ├── aar_metadata
-│       │   ├── annotation_processor_list
-│       │   ├── annotations_typedef_file
-│       │   ├── annotations_zip
-│       │   ├── compile_library_classes_jar
-│       │   ├── compile_r_class_jar
-│       │   ├── compile_symbol_list
-│       │   ├── compiled_local_resources
-│       │   ├── data_binding_layout_info_type_package
-│       │   ├── incremental
-│       │   ├── java_res
-│       │   ├── javac
-│       │   ├── library_and_local_jars_jni
-│       │   ├── library_assets
-│       │   ├── library_jni
-│       │   ├── local_only_symbol_list
-│       │   ├── manifest_merge_blame_file
-│       │   ├── merged_java_res
-│       │   ├── merged_jni_libs
-│       │   ├── merged_manifest
-│       │   ├── merged_shaders
-│       │   ├── navigation_json
-│       │   ├── nested_resources_validation_report
-│       │   ├── packaged_res
-│       │   ├── public_res
-│       │   ├── runtime_library_classes_dir
-│       │   └── symbol_list_with_package_name
-│       ├── kotlin
-│       │   └── compileDebugKotlin
-│       ├── outputs
-│       │   ├── aar
-│       │   └── logs
-│       └── tmp
-│           ├── compileDebugJavaWithJavac
-│           └── kotlin-classes
+│   │   ├── Debug-iphonesimulator
+│   │   │   ├── App.framework
+│   │   │   ├── Flutter
+│   │   │   ├── Flutter.framework
+│   │   │   ├── Pods_Runner.framework
+│   │   │   ├── Runner.app
+│   │   │   ├── Runner.swiftmodule
+│   │   │   ├── flutter_native_splash
+│   │   │   ├── flutter_soloud
+│   │   │   ├── path_provider_foundation
+│   │   │   └── shared_preferences_foundation
+│   │   ├── XCBuildData
+│   │   │   └── PIFCache
+│   │   ├── archive
+│   │   │   └── Runner.xcarchive
+│   │   ├── ipa
+│   │   │   ├── DistributionSummary.plist
+│   │   │   ├── ExportOptions.plist
+│   │   │   ├── Packaging.log
+│   │   │   └── pulsenote.ipa
+│   │   ├── iphonesimulator
+│   │   │   └── Runner.app
+│   │   └── pod_inputs.fingerprint
+│   └── native_assets
+│       └── ios
 ├── ios
+│   ├── ExportOptions.plist
 │   ├── Flutter
 │   │   ├── AppFrameworkInfo.plist
 │   │   ├── Debug.xcconfig
+│   │   ├── Flutter.podspec
 │   │   ├── Generated.xcconfig
 │   │   ├── Release.xcconfig
 │   │   ├── ephemeral
@@ -333,9 +87,11 @@
 │   │   │   ├── Flutter.podspec.json
 │   │   │   ├── audio_session.podspec.json
 │   │   │   ├── flutter_native_splash.podspec.json
+│   │   │   ├── flutter_soloud.podspec.json
 │   │   │   ├── flutter_sound.podspec.json
 │   │   │   ├── path_provider_foundation.podspec.json
 │   │   │   └── shared_preferences_foundation.podspec.json
+│   │   ├── Manifest.lock
 │   │   ├── Pods.xcodeproj
 │   │   │   ├── project.pbxproj
 │   │   │   └── xcuserdata
@@ -343,10 +99,8 @@
 │   │   │   ├── Flutter
 │   │   │   ├── Pods-Runner
 │   │   │   ├── Pods-RunnerTests
-│   │   │   ├── audio_session
 │   │   │   ├── flutter_native_splash
-│   │   │   ├── flutter_sound
-│   │   │   ├── flutter_sound_core
+│   │   │   ├── flutter_soloud
 │   │   │   ├── path_provider_foundation
 │   │   │   └── shared_preferences_foundation
 │   │   └── flutter_sound_core
@@ -393,9 +147,11 @@
 │   │   └── setlist_screen.dart
 │   ├── services
 │   │   ├── audio_service.dart
+│   │   ├── metronome_sequencer_service.dart
 │   │   └── tick_service.dart
 │   └── widgets
 │       ├── bouncing_dot.dart
+│       ├── metronome_sequencer_settings_modal.dart
 │       ├── tick_glow_overlay.dart
 │       └── wheel_picker.dart
 ├── linux
@@ -425,6 +181,7 @@
 │   │   ├── Local Podspecs
 │   │   │   ├── FlutterMacOS.podspec.json
 │   │   │   ├── audioplayers_darwin.podspec.json
+│   │   │   ├── flutter_soloud.podspec.json
 │   │   │   ├── path_provider_foundation.podspec.json
 │   │   │   └── shared_preferences_foundation.podspec.json
 │   │   ├── Pods.xcodeproj
@@ -468,6 +225,17 @@
 ├── pubspec.lock
 ├── pubspec.yaml
 ├── pulsenote.iml
+├── screenshots
+│   ├── Simulator Screenshot - iPhone 16 Pro Max - 2025-07-03 at 18.57.08.png
+│   ├── Simulator Screenshot - iPhone 16 Pro Max - 2025-07-03 at 18.58.30.png
+│   ├── Simulator Screenshot - iPhone 16 Pro Max - 2025-07-03 at 18.59.18.png
+│   ├── Tablet Screenshot Metronome.png
+│   ├── Tablet Screenshot Note Generator.png
+│   ├── Tablet Screenshot Setlist.png
+│   ├── metronome.png
+│   ├── metronomeactive.png
+│   ├── notegenerator.png
+│   └── setlist.png
 ├── test
 │   └── widget_test.dart
 ├── web
@@ -512,4 +280,4 @@
         ├── win32_window.cpp
         └── win32_window.h
 
-381 directories, 132 files
+122 directories, 159 files

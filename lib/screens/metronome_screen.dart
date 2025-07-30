@@ -17,6 +17,10 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
   bool isRunning = false;
   bool soundOn = true;
   bool sequencerEnabled = false;
+  bool tempoIncreaseEnabled = false;
+  int tempoIncreaseX = 1;    // bpm to add
+  int tempoIncreaseY = 1;    // every this many crotchet beats
+  StreamSubscription<void>? _tempoIncSub;
   bool _prefsLoaded = false;
 
   late final TickService _tickService;
@@ -41,7 +45,9 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
     final savedBpm = prefs.getInt('metronome_screen_bpm');
     final savedSound = prefs.getBool('metronome_screen_sound');
     final savedSeqEnabled = prefs.getBool('metronome_sequencer_enabled');
-
+    tempoIncreaseEnabled = prefs.getBool('tempo_increase_enabled') ?? false;
+    tempoIncreaseX       = prefs.getInt('tempo_increase_x') ?? 1;
+    tempoIncreaseY       = prefs.getInt('tempo_increase_y') ?? 1;
     final sequencer = MetronomeSequencerService();
     final loaded = await sequencer.loadMostRecent();
     if (!loaded) sequencer.initDefault();
@@ -55,6 +61,9 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
       }
       soundOn = savedSound ?? true;
       sequencerEnabled = savedSeqEnabled ?? false;
+      tempoIncreaseEnabled = tempoIncreaseEnabled;
+      tempoIncreaseX       = tempoIncreaseX;
+      tempoIncreaseY       = tempoIncreaseY;
       _prefsLoaded = true;
     });
 
@@ -62,6 +71,10 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
   }
 
   void _startMetronome() {
+
+    if (tempoIncreaseEnabled) {
+      _startTempoIncreaseMode();
+    }
     if (sequencerEnabled) {
       final seq = MetronomeSequencerService();
 
@@ -90,6 +103,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
       _tickService.start(bpm);
     }
     setState(() => isRunning = true);
+
   }
 
   void _stopMetronome() {
@@ -100,7 +114,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
     if (sequencerEnabled) {
       MetronomeSequencerService().stop();
     }
-
+    _stopTempoIncreaseMode();
     setState(() => isRunning = false);
   }
 
@@ -190,7 +204,54 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
         (p) => p.setInt('metronome_screen_bpm', loadedBpm),
       );
       if (isRunning) _tickService.updateBpm(loadedBpm);
+        SharedPreferences.getInstance().then((prefs) {
+          tempoIncreaseEnabled = prefs.getBool('tempo_increase_enabled') ?? false;
+          tempoIncreaseX       = prefs.getInt('tempo_increase_x') ?? 1;
+          tempoIncreaseY       = prefs.getInt('tempo_increase_y') ?? 1;
+          if (isRunning && tempoIncreaseEnabled) {
+            _startTempoIncreaseMode();
+          } else {
+            _stopTempoIncreaseMode();
+          }
+        });
     });
+  }
+
+  void _startTempoIncreaseMode() {
+    // cancel any old subscription
+    _tempoIncSub?.cancel();
+
+    bool _firstTickSkipped = false;
+    int _count = 0;
+
+    _tempoIncSub = _tickService.tickStream.listen((_) {
+      // 1) skip the very first tick so we don't count the "start-up" tick
+      if (!_firstTickSkipped) {
+        _firstTickSkipped = true;
+        return;
+      }
+
+      // 2) count each crotchet tick thereafter
+      _count++;
+
+      // 3) once we've seen Y beats, bump the tempo
+      if (_count >= tempoIncreaseY) {
+        _count = 0;
+        final updated = (bpm + tempoIncreaseX).clamp(10, 240);
+        setState(() => bpm = updated);
+
+        // drive both modes
+        MetronomeSequencerService().bpm = updated;
+        _tickService.updateBpm(updated);
+        SharedPreferences.getInstance()
+          .then((p) => p.setInt('metronome_screen_bpm', updated));
+      }
+    });
+  }
+
+  void _stopTempoIncreaseMode() {
+    _tempoIncSub?.cancel();
+    _tempoIncSub = null;
   }
 
   @override

@@ -219,6 +219,9 @@ class MetronomeSequencerService {
   int _currentStepIndex = 0;
   bool isRunning = false;
   bool _soundOn = true;
+  double _swingFraction = 0.0;   
+  double _shuffleFraction = 0.0;
+  late double _subTickIntervalMs;
 
   final StreamController<void> _updateController = StreamController.broadcast();
   Stream<void> get updateStream => _updateController.stream;
@@ -241,16 +244,22 @@ class MetronomeSequencerService {
   set bpm(int v) {
     _bpm = v;
     bpmNotifier.value = v;
+    if (isRunning) {
+      _subTickIntervalMs = 60000 / _bpm * unitFraction;
+      TickService().updateBpm(_bpm);
+    }
   }
 
   static const _currentKey = 'sequencer_current_state';
 
-  /// Silently persist the live bars + bpm to a hidden prefs key.
+  /// Silently persist the live bars + bpm + swing/shuffle to a hidden prefs key.
   Future<void> saveCurrentState() async {
     final prefs = await SharedPreferences.getInstance();
     final payload = {
-      'bpm': _bpm, 
+      'bpm': _bpm,
       'bars': _bars.map((b) => b.toJson()).toList(),
+      'swing': (_swingFraction * 100).round(),
+      'shuffle': (_shuffleFraction * 100).round(),
     };
     await prefs.setString(_currentKey, jsonEncode(payload));
   }
@@ -266,6 +275,9 @@ class MetronomeSequencerService {
       ..clear()
       ..addAll((decoded['bars'] as List)
         .map((e) => MetronomeBar.fromJson(e as Map<String, dynamic>)));
+    // restore swing & shuffle values
+    _swingFraction   = ((decoded['swing'] as int?)   ?? 0) / 100.0;
+    _shuffleFraction = ((decoded['shuffle'] as int?) ?? 0) / 100.0;
     reset();
     return true;
   }
@@ -304,13 +316,21 @@ class MetronomeSequencerService {
     _soundOn = enabled;
   }
 
-  void start({ required int bpm, required bool soundOn }) {
+  Future<void> start({ required int bpm, required bool soundOn }) async {
     if (_bars.isEmpty || isRunning) return;
     stop();
     isRunning = true;
     _soundOn = soundOn;
 
-    // 1) Build a tick‐based schedule (every length in integer ticks)
+    // 1) compute sub-tick interval from BPM
+    _subTickIntervalMs = 60000 / bpm * unitFraction;
+
+    // 2) load user swing/shuffle at start
+    final prefs = await SharedPreferences.getInstance();
+    _swingFraction   = (prefs.getDouble('swing')   ?? 0.0) / 100.0;
+    _shuffleFraction = (prefs.getDouble('shuffle') ?? 0.0) / 100.0;
+
+    // 1) Build a tick‐based schedule (with swing/shuffle flags)
     _schedule = _buildSchedule();
     _currentTick = 0;
 
@@ -333,12 +353,40 @@ class MetronomeSequencerService {
     final out = <_StepTime>[];
     int cursor = 0;
     for (int b = 0; b < _bars.length; b++) {
-      for (int s = 0; s < _bars[b].steps.length; s++) {
-        final step = _bars[b].steps[s];
-        final int length = (step.rhythm.durationInBeats * ticksPerBeat).round();
-        out.add(_StepTime(b, s, cursor, length, step.isMuted, step.isAccented));
-        cursor += length;
+      final bar = _bars[b];
+      // 1) gather base times
+      final List<_StepTime> barTimes = [];
+      var local = cursor;
+      for (int s = 0; s < bar.steps.length; s++) {
+        final step = bar.steps[s];
+        final len = (step.rhythm.durationInBeats * ticksPerBeat).round();
+        barTimes.add(_StepTime(
+          b, s, local, len,
+          step.isMuted, step.isAccented,
+          false, false
+        ));
+        local += len;
       }
+      // 2) mark swing on odd quaver pairs (6‑tick)
+      for (int i = 0; i < barTimes.length - 1; ) {
+        if (barTimes[i].durationTicks == 6 && barTimes[i+1].durationTicks == 6) {
+          barTimes[i+1] = barTimes[i+1].copyWith(swingStep: true);
+          i += 2;
+        } else {
+          i += 1;
+        }
+      }
+      // 3) mark shuffle on odd semiquaver pairs (3‑tick)
+      for (int i = 0; i < barTimes.length - 1; ) {
+        if (barTimes[i].durationTicks == 3 && barTimes[i+1].durationTicks == 3) {
+          barTimes[i+1] = barTimes[i+1].copyWith(shuffleStep: true);
+          i += 2;
+        } else {
+          i += 1;
+        }
+      }
+      out.addAll(barTimes);
+      cursor = local;
     }
     _totalTicksPerCycle = cursor;
     return out;
@@ -361,16 +409,32 @@ class MetronomeSequencerService {
         // fetch the live MetronomeStep so toggles take effect immediately
         final liveStep = _bars[step.barIndex].steps[step.stepIndex];
 
-        if (!liveStep.isMuted && _soundOn) {
-          if (liveStep.isAccented) {
-            AudioService.playAccentClick();
-          } else {
-            AudioService.playClick();
-          }
-        }
+        // compute swing/shuffle delay fraction
+        final delayFrac = step.swingStep   ? _swingFraction
+                        : step.shuffleStep ? _shuffleFraction
+                        : 0.0;
+        // convert to milliseconds
+        final stepMs = (_subTickIntervalMs * step.durationTicks).round();
+        final extra  = (stepMs * delayFrac).round();
 
-        // trigger UI update
-        _updateController.add(null);
+        if (delayFrac > 0) {
+          Future.delayed(Duration(milliseconds: extra), () {
+            // play click (accented or not)
+            if (!liveStep.isMuted && _soundOn) {
+              if (liveStep.isAccented) AudioService.playAccentClick();
+              else                     AudioService.playClick();
+            }
+            // now trigger the UI update in sync with the audio
+            _updateController.add(null);
+          });
+        } else {
+          // no delay: play & highlight immediately
+          if (!liveStep.isMuted && _soundOn) {
+            if (liveStep.isAccented) AudioService.playAccentClick();
+            else                     AudioService.playClick();
+          }
+          _updateController.add(null);
+        }
       }
     }
     _currentTick++;
@@ -395,9 +459,13 @@ class MetronomeSequencerService {
 
   Future<void> saveToPrefs(String label) async {
     final prefs = await SharedPreferences.getInstance();
+    final swing   = (prefs.getDouble('swing')   ?? 0.0).round();
+    final shuffle = (prefs.getDouble('shuffle') ?? 0.0).round();
     final payload = {
       'bpm': _bpm,
       'bars': _bars.map((b) => b.toJson()).toList(),
+      'swing': swing,
+      'shuffle': shuffle,
     };
     final jsonStr = jsonEncode(payload);
     await prefs.setString('sequencer_metronome_$label', jsonStr);
@@ -409,16 +477,16 @@ class MetronomeSequencerService {
     if (jsonStr == null) return false;
 
     final decoded = jsonDecode(jsonStr) as Map<String, dynamic>;
-
-    // restore BPM (clamp later in UI)
+    // restore BPM
     bpm = decoded['bpm'] as int? ?? 60;
-
     // restore bars
     final barsJson = decoded['bars'] as List<dynamic>;
     _bars
       ..clear()
       ..addAll(barsJson.map((e) => MetronomeBar.fromJson(e as Map<String, dynamic>)));
-
+    // restore swing & shuffle
+    _swingFraction   = ((decoded['swing'] as int?)   ?? 0) / 100.0;
+    _shuffleFraction = ((decoded['shuffle'] as int?) ?? 0) / 100.0;
     reset();
     return true;
   }
@@ -446,6 +514,8 @@ class _StepTime {
   final int durationTicks;   // how many ticks this step lasts
   final bool isMuted;
   final bool isAccented;
+  final bool swingStep;      // flagged in build
+  final bool shuffleStep; 
 
   _StepTime(
     this.barIndex,
@@ -453,8 +523,19 @@ class _StepTime {
     this.startTick,
     this.durationTicks,
     this.isMuted,
-    this.isAccented
+    this.isAccented,
+    this.swingStep,
+    this.shuffleStep
   );
+
+  _StepTime copyWith({bool? swingStep, bool? shuffleStep}) {
+    return _StepTime(
+      barIndex, stepIndex, startTick, durationTicks,
+      isMuted, isAccented,
+      swingStep ?? this.swingStep,
+      shuffleStep ?? this.shuffleStep,
+    );
+  }
 }
 
 // ─── UI WIDGETS ─────────────────────────────────────────────────────────
@@ -577,6 +658,19 @@ class MetronomeSequencerWidgetState extends State<MetronomeSequencerWidget> with
 
     _subscription = sequencer.updateStream.listen((_) {
       if (!mounted) return;
+      // clamp selection if new sequence is shorter than before
+      setState(() {
+        if (_selectedBarIndex != null && _selectedBarIndex! >= sequencer.bars.length) {
+          _selectedBarIndex = null;
+          _selectedStepIndex = null;
+          _popupVisible = false;
+        } else if (_selectedBarIndex != null &&
+                   _selectedStepIndex != null &&
+                   _selectedStepIndex! >= sequencer.bars[_selectedBarIndex!].steps.length) {
+          _selectedStepIndex = null;
+          _popupVisible = false;
+        }
+      });
       _animController.forward(from: 0);
       _scrollToCurrentBar();
       setState(() {});

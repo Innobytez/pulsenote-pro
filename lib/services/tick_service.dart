@@ -87,7 +87,6 @@ class TickService {
           _safeNotify(() => bpmNotifier.value = _bpm);
           _stopwatch!..stop()..reset()..start();
           _subTickCount = 0;
-          _crotchetController.add(null);
         }
 
         // Schedule the next tick.
