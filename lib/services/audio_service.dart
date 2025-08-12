@@ -65,7 +65,7 @@ class AudioService {
   static Uint8List _generateSineWaveWav({
     required double frequency,
     required int durationMs,
-    double amplitude = 0.6,
+    double amplitude = 0.9,
     bool fadeOut = true,
   }) {
     const sr = 44100;

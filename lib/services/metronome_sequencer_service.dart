@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/audio_service.dart';
@@ -727,104 +728,172 @@ class MetronomeSequencerWidgetState extends State<MetronomeSequencerWidget> with
     }
   }
 
-  void _showAddBarPopup(BuildContext context) {
-    final options = <Map<String, int>>[
-      {'beats': 1, 'note': 4},
-      {'beats': 2, 'note': 4},
-      {'beats': 3, 'note': 4},
-      {'beats': 4, 'note': 4},
-      {'beats': 1, 'note': 8},
-      {'beats': 2, 'note': 8},
-      {'beats': 3, 'note': 8},
-      {'beats': 4, 'note': 8},
-      {'beats': 5, 'note': 8},
-      {'beats': 6, 'note': 8},
-      {'beats': 7, 'note': 8},
-      {'beats': 8, 'note': 8},
-    ];
+void _showAddBarPopup(BuildContext context) {
+  int selectedBeats = 4;
+  int selectedNote = 4;
 
-    showModalBottomSheet(
-      context: context,
-      builder: (_) {
-        return Container(
-          color: Colors.black,
-          padding: const EdgeInsets.all(16),
-          child: GridView.count(
-            crossAxisCount: 4,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-            childAspectRatio: 1,
-            shrinkWrap: true,
-            children: options.map((opt) {
-              final beats = opt['beats']!;
-              final note  = opt['note']!;
-              final ts    = TimeSignature(beatsPerBar: beats, noteValue: note);
-
-              return ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.tealAccent,
-                  padding: EdgeInsets.zero,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                onPressed: () {
-                  final newBar = MetronomeBar(
-                    timeSig: ts,
-                    steps: List.generate(beats, (_) {
-                      return MetronomeStep(
-                        rhythm: note == 4 ? RhythmType.crotchet : RhythmType.quaver
-                      );
-                    }),
-                  );
-
-                  // calculate scroll offset
-                  double scrollDelta = 0;
-                  if (_selectedBarIndex != null) {
-                    final box = (_barKeys[_selectedBarIndex!]!
-                                .currentContext!
-                                .findRenderObject() as RenderBox);
-                    scrollDelta = box.size.height;
-                  }
-
-                  setState(() {
-                    if (_selectedBarIndex != null) {
-                      sequencer.bars.insert(_selectedBarIndex! + 1, newBar);
-                      _selectedBarIndex = _selectedBarIndex! + 1;
-                    } else {
-                      sequencer.bars.add(newBar);
-                      _selectedBarIndex = sequencer.bars.length - 1;
-                    }
-                    sequencer.rebuildSchedule();
-                    _selectedStepIndex = 0;
-                    _popupVisible      = true;
-                    sequencer.jumpTo(_selectedBarIndex!, 0);
-                  });
-
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (scrollDelta > 0) {
-                      _scrollController.jumpTo(
-                        _scrollController.offset - scrollDelta,
-                      );
-                    }
-                  });
-
-                  Navigator.pop(context);
-                },
-                child: Center(
-                  child: TimeSignatureWidget(
-                    ts,
-                    color: Colors.black,
-                    size: 56,
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        );
-      },
-    );
+  void updateBeatsRangeIfNeeded() {
+    if (selectedNote == 4 && selectedBeats > 4) {
+      selectedBeats = 4;
+    }
   }
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.black,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (_) {
+      return StatefulBuilder(
+        builder: (context, setModalState) {
+          final beatValues = selectedNote == 4
+              ? List.generate(4, (i) => i + 1)
+              : List.generate(8, (i) => i + 1);
+          final noteValues = [4, 8];
+
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  "Select Time Signature",
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildWheelPicker(
+                      context,
+                      label: 'Beats',
+                      values: beatValues,
+                      initial: selectedBeats,
+                      onChanged: (v) => setModalState(() => selectedBeats = v),
+                    ),
+                    const SizedBox(width: 16),
+                    _buildWheelPicker(
+                      context,
+                      label: 'Note',
+                      values: noteValues,
+                      initial: selectedNote,
+                      onChanged: (v) {
+                        setModalState(() {
+                          selectedNote = v;
+                          updateBeatsRangeIfNeeded();
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.tealAccent,
+                    foregroundColor: Colors.black,
+                  ),
+                  child: const Text("Add Bar"),
+                  onPressed: () {
+                    final ts = TimeSignature(
+                        beatsPerBar: selectedBeats, noteValue: selectedNote);
+                    final newBar = MetronomeBar(
+                      timeSig: ts,
+                      steps: List.generate(selectedBeats, (_) {
+                        return MetronomeStep(
+                          rhythm: selectedNote == 4
+                              ? RhythmType.crotchet
+                              : RhythmType.quaver,
+                        );
+                      }),
+                    );
+
+                    double scrollDelta = 0;
+                    if (_selectedBarIndex != null) {
+                      final box = (_barKeys[_selectedBarIndex!]!
+                          .currentContext!
+                          .findRenderObject() as RenderBox);
+                      scrollDelta = box.size.height;
+                    }
+
+                    setState(() {
+                      if (_selectedBarIndex != null) {
+                        sequencer.bars.insert(_selectedBarIndex! + 1, newBar);
+                        _selectedBarIndex = _selectedBarIndex! + 1;
+                      } else {
+                        sequencer.bars.add(newBar);
+                        _selectedBarIndex = sequencer.bars.length - 1;
+                      }
+                      sequencer.rebuildSchedule();
+                      _selectedStepIndex = 0;
+                      _popupVisible = true;
+                      sequencer.jumpTo(_selectedBarIndex!, 0);
+                    });
+
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (scrollDelta > 0) {
+                        _scrollController.jumpTo(
+                          _scrollController.offset - scrollDelta,
+                        );
+                      }
+                    });
+
+                    Navigator.pop(context);
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+Widget _buildWheelPicker(
+  BuildContext context, {
+  required String label,
+  required List<int> values,
+  required int initial,
+  required void Function(int) onChanged,
+}) {
+  final height = 100.0;
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(label, style: const TextStyle(color: Colors.white70)),
+      const SizedBox(height: 8),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 80,
+          height: height,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.tealAccent),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: CupertinoPicker(
+            itemExtent: height / 2.5,
+            scrollController:
+                FixedExtentScrollController(initialItem: values.indexOf(initial)),
+            backgroundColor: Colors.black,
+            onSelectedItemChanged: (index) => onChanged(values[index]),
+            children: values
+                .map((v) => Center(
+                      child: Text('$v',
+                          style: TextStyle(
+                            fontSize: height / 3,
+                            color: Colors.white,
+                          )),
+                    ))
+                .toList(),
+          ),
+        ),
+      ),
+    ],
+  );
+}
 
 /// --- Helper that builds one bar (notes left-aligned, original selection bracket restored) ---
 Widget _buildBar(int barIndex) {

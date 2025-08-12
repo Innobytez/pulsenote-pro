@@ -1,182 +1,203 @@
 // File: lib/screens/metronome_screen.dart
+
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+
+import '../services/app_state_service.dart';
 import '../services/audio_service.dart';
 import '../services/tick_service.dart';
 import '../widgets/wheel_picker.dart';
 import '../widgets/metronome_settings_modal.dart';
 
 class MetronomeScreen extends StatefulWidget {
-  const MetronomeScreen({super.key});
+  /// Whether this tab is active (so we can stop playback when switching away)
+  final bool active;
+
+  const MetronomeScreen({
+    super.key,
+    required this.active,
+  });
+
   @override
   State<MetronomeScreen> createState() => _MetronomeScreenState();
 }
 
 class _MetronomeScreenState extends State<MetronomeScreen> {
-  int bpm = 60;
-  bool isRunning = false;
-  bool soundOn = true;
-  bool tempoIncreaseEnabled = false;
-  int tempoIncreaseX = 1;
-  int tempoIncreaseY = 1;
+  final TickService _tickService = TickService();
+  StreamSubscription<void>? _clickSub;
   StreamSubscription<void>? _tempoIncSub;
+  bool _isRunning = false;
 
-  late final TickService _tickService;
-  StreamSubscription<void>? _tickSub;
-  List<DateTime> tapTimes = [];
+  // For tap-tempo
+  final List<DateTime> _tapTimes = [];
   Timer? _tapResetTimer;
   DateTime? _tapSuppressionUntil;
 
   @override
-  void initState() {
-    super.initState();
-    _tickService = TickService();
-    _loadPreferences();
-  }
-
-  Future<void> _loadPreferences() async {
-    final prefs = await SharedPreferences.getInstance();
-    bpm = (prefs.getInt('metronome_screen_bpm') ?? 60).clamp(10, 240);
-    soundOn = prefs.getBool('metronome_screen_sound') ?? true;
-    tempoIncreaseEnabled = prefs.getBool('tempo_increase_enabled') ?? false;
-    tempoIncreaseX = prefs.getInt('tempo_increase_x') ?? 1;
-    tempoIncreaseY = prefs.getInt('tempo_increase_y') ?? 1;
-    setState(() {});
+  void didUpdateWidget(covariant MetronomeScreen old) {
+    super.didUpdateWidget(old);
+    if (old.active && !widget.active && _isRunning) {
+      _stop();
+    }
   }
 
   void _start() {
-    if (tempoIncreaseEnabled) _startTempoIncreaseMode();
-    _tickSub?.cancel();
-    _tickSub = _tickService.tickStream.listen((_) {
+    final appState = context.read<AppStateService>();
+    final bpm = appState.bpm;
+
+    // cleanup
+    _clickSub?.cancel();
+    _tempoIncSub?.cancel();
+
+    _tickService.start(bpm);
+
+    // tempo-increase
+    if (appState.tempoIncreaseEnabled) {
+      int counter = 0;
+      _tempoIncSub = _tickService.tickStream.skip(1).listen((_) {
+        counter++;
+        if (counter >= appState.tempoIncreaseY) {
+          counter = 0;
+          final newBpm = (appState.bpm + appState.tempoIncreaseX).clamp(10, 240);
+          appState.setBpm(newBpm);
+          _tickService.updateBpm(newBpm);
+        }
+      });
+    }
+
+    // live soundOn check each tick
+    _clickSub = _tickService.tickStream.listen((_) {
       final now = DateTime.now();
       if (_tapSuppressionUntil != null && now.isBefore(_tapSuppressionUntil!)) return;
-      if (soundOn) AudioService.playClick();
+      if (context.read<AppStateService>().soundOn) {
+        AudioService.playClick();
+      }
     });
-    _tickService.start(bpm);
-    setState(() => isRunning = true);
+
+    setState(() => _isRunning = true);
   }
 
   void _stop() {
     _tickService.stop();
-    _tickSub?.cancel();
-    _stopTempoIncreaseMode();
-    setState(() => isRunning = false);
+    _clickSub?.cancel();
+    _tempoIncSub?.cancel();
+    setState(() => _isRunning = false);
+  }
+
+  void _onDragBpm(int val) {
+    final bpm = val.clamp(10, 240);
+    final appState = context.read<AppStateService>();
+    appState.setBpm(bpm);
+    if (_isRunning) _tickService.updateBpm(bpm);
   }
 
   void _tapTempo() {
+    final appState = context.read<AppStateService>();
     final now = DateTime.now();
-    tapTimes.add(now);
+    _tapTimes.add(now);
     _tapResetTimer?.cancel();
-    _tapResetTimer = Timer(const Duration(seconds: 6), () => tapTimes.clear());
-    if (tapTimes.length > 4) tapTimes.removeAt(0);
-    if (tapTimes.length >= 2) {
+    _tapResetTimer = Timer(const Duration(seconds: 6), () => _tapTimes.clear());
+    if (_tapTimes.length > 4) _tapTimes.removeAt(0);
+
+    if (_tapTimes.length >= 2) {
       final intervals = <int>[];
-      for (int i = 1; i < tapTimes.length; i++) {
-        intervals.add(tapTimes[i].difference(tapTimes[i - 1]).inMilliseconds);
+      for (int i = 1; i < _tapTimes.length; i++) {
+        intervals.add(_tapTimes[i].difference(_tapTimes[i - 1]).inMilliseconds);
       }
       final last = intervals.last;
-      final deviation = (last * 0.2).round();
-      final filtered = intervals.where((ms) => (ms - last).abs() <= deviation).toList();
-      final avgMs = filtered.isNotEmpty
+      final dev = (last * 0.2).round();
+      final filtered = intervals.where((ms) => (ms - last).abs() <= dev).toList();
+      final avg = filtered.isNotEmpty
           ? filtered.reduce((a, b) => a + b) ~/ filtered.length
           : last;
-      final newBpm = (60000 / avgMs).clamp(10, 240).round();
-      setState(() => bpm = newBpm);
-      SharedPreferences.getInstance().then((p) => p.setInt('metronome_screen_bpm', newBpm));
-      if (isRunning) _tickService.updateBpm(newBpm);
+      final newBpm = (60000 / avg).clamp(10, 240).round();
+      appState.setBpm(newBpm);
+      if (_isRunning) _tickService.updateBpm(newBpm);
     }
-    if (soundOn) {
+
+    if (context.read<AppStateService>().soundOn) {
       AudioService.playClick();
-      _tapSuppressionUntil = now.add(Duration(milliseconds: (60000 / bpm * 1.5).round()));
+      _tapSuppressionUntil = now.add(
+        Duration(milliseconds: (60000 / context.read<AppStateService>().bpm * 1.5).round()),
+      );
     }
   }
 
   void _toggleSound() {
-    setState(() => soundOn = !soundOn);
-    SharedPreferences.getInstance().then((p) => p.setBool('metronome_screen_sound', soundOn));
+    final appState = context.read<AppStateService>();
+    appState.setSoundOn(!appState.soundOn);
   }
 
-  void _startTempoIncreaseMode() {
-    _tempoIncSub?.cancel();
-    bool firstSkipped = false;
-    int count = 0;
-    _tempoIncSub = _tickService.tickStream.listen((_) {
-      if (!firstSkipped) { firstSkipped = true; return; }
-      count++;
-      if (count >= tempoIncreaseY) {
-        count = 0;
-        setState(() => bpm = (bpm + tempoIncreaseX).clamp(10, 240));
-        _tickService.updateBpm(bpm);
-        SharedPreferences.getInstance().then((p) => p.setInt('metronome_screen_bpm', bpm));
-      }
-    });
-    _tickService.start(bpm);
-  }
-
-  void _stopTempoIncreaseMode() {
-    _tempoIncSub?.cancel();
-    _tempoIncSub = null;
-  }
-
-  void _openSettings() {
-    _tickService.stop();
-    _tickSub?.cancel();
-    setState(() => isRunning = false);
-    showModalBottomSheet(
+  Future<void> _openSettings() async {
+    _stop();
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (_) => const MetronomeSettingsModal(),
-    ).then((_) {
-      SharedPreferences.getInstance().then((prefs) {
-        tempoIncreaseEnabled = prefs.getBool('tempo_increase_enabled') ?? false;
-        tempoIncreaseX = prefs.getInt('tempo_increase_x') ?? 1;
-        tempoIncreaseY = prefs.getInt('tempo_increase_y') ?? 1;
-      });
-      setState(() {});
-    });
+    );
   }
 
   @override
   void dispose() {
+    _clickSub?.cancel();
     _tempoIncSub?.cancel();
-    _tickSub?.cancel();
     _tickService.stop();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<AppStateService>();
     final width = MediaQuery.of(context).size.width;
     final wheelHeight = width * 0.8;
+
     return SafeArea(
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
         children: [
+          // BPM wheel
           SizedBox(
             height: wheelHeight,
-            child: Center(
-              child: WheelPicker(
-                initialBpm: bpm,
-                minBpm: 10,
-                maxBpm: 240,
-                wheelSize: wheelHeight,
-                onBpmChanged: (val) {
-                  setState(() => bpm = val);
-                  _tickService.updateBpm(val);
-                  SharedPreferences.getInstance().then((p) => p.setInt('metronome_screen_bpm', val));
-                },
-              ),
+            child: WheelPicker(
+              initialBpm: appState.bpm,
+              minBpm: 10,
+              maxBpm: 240,
+              wheelSize: wheelHeight,
+              onBpmChanged: _onDragBpm,
             ),
           ),
+
+          // controls
           SizedBox(
             height: 100,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                IconButton(iconSize: 40, icon: Icon(soundOn ? Icons.volume_up : Icons.volume_off), onPressed: _toggleSound),
-                IconButton(iconSize: 40, icon: Icon(isRunning ? Icons.stop_circle : Icons.play_circle), onPressed: () => isRunning ? _stop() : _start()),
-                IconButton(iconSize: 40, icon: const Icon(Icons.touch_app), onPressed: _tapTempo),
-                IconButton(iconSize: 40, icon: const Icon(Icons.settings), onPressed: _openSettings),
+                // sound toggle
+                IconButton(
+                  iconSize: 40,
+                  icon: Icon(appState.soundOn ? Icons.volume_up : Icons.volume_off),
+                  onPressed: _toggleSound,
+                ),
+                // play / stop
+                IconButton(
+                  iconSize: 40,
+                  icon: Icon(_isRunning ? Icons.stop_circle : Icons.play_circle),
+                  onPressed: () => _isRunning ? _stop() : _start(),
+                ),
+                // tap tempo
+                IconButton(
+                  iconSize: 40,
+                  icon: const Icon(Icons.touch_app),
+                  onPressed: _tapTempo,
+                ),
+                // settings
+                IconButton(
+                  iconSize: 40,
+                  icon: const Icon(Icons.settings),
+                  onPressed: _openSettings,
+                ),
               ],
             ),
           ),

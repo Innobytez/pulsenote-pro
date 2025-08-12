@@ -1,16 +1,17 @@
-// File: lib/widgets/metronome_settings_modal.dart
+// File: lib/widgets/note_generator_settings_modal.dart
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/app_state_service.dart';
 
-class MetronomeSettingsModal extends StatelessWidget {
-  const MetronomeSettingsModal({Key? key}) : super(key: key);
+class NoteGeneratorSettingsModal extends StatelessWidget {
+  const NoteGeneratorSettingsModal({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppStateService>();
-    final submenuStyle = Theme.of(context).textTheme.bodySmall ?? const TextStyle(fontSize: 12);
+    final submenuStyle = Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white70)
+        ?? const TextStyle(fontSize: 12, color: Colors.white70);
 
     return Container(
       decoration: const BoxDecoration(
@@ -19,19 +20,19 @@ class MetronomeSettingsModal extends StatelessWidget {
       ),
       padding: const EdgeInsets.all(16),
       child: Column(
-        mainAxisSize: MainAxisSize.min, // Only take up needed vertical space
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SwitchListTile(
             title: const Text('Tempo Increase', style: TextStyle(color: Colors.white)),
             value: appState.tempoIncreaseEnabled,
-            onChanged: appState.setTempoIncreaseEnabled,
+            onChanged: (v) => context.read<AppStateService>().setTempoIncreaseEnabled(v),
           ),
           if (appState.tempoIncreaseEnabled)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: DefaultTextStyle(
-                style: submenuStyle.copyWith(color: Colors.white70),
+                style: submenuStyle,
                 child: Row(
                   children: [
                     const Text('Increase BPM by'),
@@ -43,9 +44,13 @@ class MetronomeSettingsModal extends StatelessWidget {
                       items: List.generate(16, (i) => i + 1)
                           .map((v) => DropdownMenuItem(value: v, child: Text('$v')))
                           .toList(),
-                      onChanged: (newX) {
-                        if (newX == null) return;
-                        appState.setTempoIncreaseValues(newX, appState.tempoIncreaseY);
+                      onChanged: (v) {
+                        if (v != null) {
+                          context.read<AppStateService>().setTempoIncreaseValues(
+                            v,
+                            appState.tempoIncreaseY,
+                          );
+                        }
                       },
                     ),
                     const SizedBox(width: 8),
@@ -58,17 +63,32 @@ class MetronomeSettingsModal extends StatelessWidget {
                       items: List.generate(16, (i) => i + 1)
                           .map((v) => DropdownMenuItem(value: v, child: Text('$v')))
                           .toList(),
-                      onChanged: (newY) {
-                        if (newY == null) return;
-                        appState.setTempoIncreaseValues(appState.tempoIncreaseX, newY);
+                      onChanged: (v) {
+                        if (v != null) {
+                          context.read<AppStateService>().setTempoIncreaseValues(
+                            appState.tempoIncreaseX,
+                            v,
+                          );
+                        }
                       },
                     ),
                     const SizedBox(width: 8),
-                    const Text('beats'),
+                    const Text('ticks'),
                   ],
                 ),
               ),
             ),
+          const Divider(color: Colors.white24),
+          Center(
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                foregroundColor: Colors.black,
+                backgroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Select Notes'),
+            ),
+          ),
         ],
       ),
     );
