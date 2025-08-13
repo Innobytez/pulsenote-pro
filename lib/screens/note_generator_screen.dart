@@ -25,10 +25,7 @@ class NoteGeneratorScreen extends StatefulWidget {
 class _NoteGeneratorScreenState extends State<NoteGeneratorScreen>
     with SingleTickerProviderStateMixin {
   static const _defaultNotes = [
-    'C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'
-  ];
-  static const _extraNotes = [
-    'B#','Db','D#','Fb','E#','Gb','G#','A#','Cb'
+    'C','C#','D','D#','E','F','F#','G','G#','A','A#','B'
   ];
 
   late Set<String> _selectedNotes;
@@ -145,63 +142,117 @@ class _NoteGeneratorScreenState extends State<NoteGeneratorScreen>
       builder: (_) => const NoteGeneratorSettingsModal(),
     );
 
-    // Reload note‐prefs and app state (tempo-increase) immediately
-    await _loadNotePrefs();
     if (wantSelect == true) {
       _showNoteSelector();
     }
-    if (wasAuto) _toggleAuto();
+
   }
 
   void _showNoteSelector() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.transparent, // show rounded corners
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModalState) {
-          final all = [..._defaultNotes, ..._extraNotes];
-          return Padding(
-            padding: EdgeInsets.fromLTRB(
-              16, 16, 16, MediaQuery.of(ctx).viewInsets.bottom + 16
-            ),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  ElevatedButton(
-                    onPressed: () {
-                      setModalState(() => _selectedNotes = _defaultNotes.toSet());
-                      _saveNotePrefs();
-                    },
-                    child: const Text('Reset'),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              Expanded(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: all.map((note) {
-                    final sel = _selectedNotes.contains(note);
-                    return CheckboxListTile(
-                      title: Text(note, style: const TextStyle(color: Colors.white)),
-                      value: sel,
-                      onChanged: (v) {
-                        setModalState(() {
-                          if (v == true) _selectedNotes.add(note);
-                          else _selectedNotes.remove(note);
-                        });
-                        _saveNotePrefs();
+          // Pairs so enharmonics share a row
+          const pairs = <List<String?>>[
+            ['C',  'B#'],
+            ['C#', 'Db'],
+            ['D',  null],
+            ['D#', 'Eb'],
+            ['E',  'Fb'],
+            ['F',  'E#'],
+            ['F#', 'Gb'],
+            ['G',  null],
+            ['G#', 'Ab'],
+            ['A',  null],
+            ['A#', 'Bb'],
+            ['B',  'Cb'],
+          ];
+
+          Widget noteTile(String note) {
+            final sel = _selectedNotes.contains(note);
+            return CheckboxListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(note, style: const TextStyle(color: Colors.white)),
+              value: sel,
+              activeColor: Colors.tealAccent,
+              checkColor: Colors.black,
+              onChanged: (v) {
+                setModalState(() {
+                  if (v == true) _selectedNotes.add(note);
+                  else _selectedNotes.remove(note);
+                });
+                _saveNotePrefs();
+              },
+            );
+          }
+
+          // Wrap lets the sheet size itself to the child's intrinsic height.
+          return Wrap(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                  border: Border(top: BorderSide(color: Colors.grey.shade800, width: 1)),
+                ),
+                padding: EdgeInsets.fromLTRB(
+                  16, 16, 16, MediaQuery.of(ctx).viewInsets.bottom + 16,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min, // size to content
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        ElevatedButton(
+                          onPressed: () {
+                            setModalState(() => _selectedNotes = _defaultNotes.toSet());
+                            _saveNotePrefs();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.tealAccent,
+                            foregroundColor: Colors.black,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Reset'),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Two-per-row with enharmonic pairs — no Expanded; shrink-wrap instead
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: pairs.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 4),
+                      itemBuilder: (_, i) {
+                        final left = pairs[i][0]!;
+                        final right = pairs[i][1];
+                        return Row(
+                          children: [
+                            Expanded(child: noteTile(left)),
+                            const SizedBox(width: 16),
+                            Expanded(child: right == null ? const SizedBox.shrink() : noteTile(right)),
+                          ],
+                        );
                       },
-                    );
-                  }).toList(),
+                    ),
+                  ],
                 ),
               ),
-            ]),
+            ],
           );
         },
       ),
