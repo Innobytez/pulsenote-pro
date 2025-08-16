@@ -1,33 +1,54 @@
+// File: lib/services/tick_service.dart
+
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
-/// Provides precise sub-beat and crotchet ticks using a drift-corrected Stopwatch + Timer.
+typedef AsyncVoid = Future<void> Function();
+
+/// Provides precise sub-beat and crotchet ticks using a drift-corrected
+/// Stopwatch + Timer. Also exposes a background "resumer" hook so the
+/// SystemMediaHandler (Control Center / notifications) can restart the
+/// *currently active* mode without needing to know which screen owns playback.
 class TickService {
   static final TickService _instance = TickService._internal();
   factory TickService() => _instance;
   TickService._internal();
 
-  final StreamController<void> _crotchetController = StreamController<void>.broadcast();
+  // Public streams: crotchet (tickStream) and sub-tick (subTickStream)
+  final _crotchetController = StreamController<void>.broadcast();
   Stream<void> get tickStream => _crotchetController.stream;
 
-  final StreamController<void> _subController = StreamController<void>.broadcast();
+  final _subController = StreamController<void>.broadcast();
   Stream<void> get subTickStream => _subController.stream;
 
+  // UI notifiers used by your overlays/dots
   final ValueNotifier<int> bpmNotifier = ValueNotifier<int>(60);
   final ValueNotifier<bool> isRunningNotifier = ValueNotifier<bool>(false);
 
+  // Internal timing
   int? _pendingBpm;
   Timer? _timer;
   Stopwatch? _stopwatch;
   int _bpm = 60;
   Duration _interval = const Duration(milliseconds: 1000);
-
   int _subTickCount = 0;
   int _ticksPerCrotchet = 1;
 
-  /// Starts at [bpm], subdividing by [unitFraction].
-  void start(int bpm, { double unitFraction = 1.0 }) {
+  // Background resume hook
+  AsyncVoid? _backgroundResumer;
+  void setBackgroundResumer(AsyncVoid? cb) => _backgroundResumer = cb;
+  Future<bool> resumeFromBackground() async {
+    final cb = _backgroundResumer;
+    if (cb == null) return false;
+    await cb();
+    return true;
+    // Note: the owning screen should set this when it starts playback
+    // and clear it when it stops (so play from Control Center is predictable).
+  }
+
+  /// Starts ticking at [bpm]. [unitFraction] = 1.0 (quarter), 0.5 (eighth), etc.
+  void start(int bpm, {double unitFraction = 1.0}) {
     stop();
     _bpm = bpm;
     _ticksPerCrotchet = (1 / unitFraction).round();
@@ -37,8 +58,8 @@ class TickService {
     _safeNotify(() => isRunningNotifier.value = true);
 
     _stopwatch = Stopwatch()..start();
-    _emitTick();            // immediate
-    _stopwatch!..reset();   // zero elapsed
+    _emitTick();          // immediate first tick
+    _stopwatch!..reset(); // zero elapsed
     _subTickCount = 0;
     _scheduleNextTick();
   }
@@ -52,7 +73,7 @@ class TickService {
     _safeNotify(() => isRunningNotifier.value = false);
   }
 
-  /// Defer a BPM change until the next crotchet-boundary.
+  /// Defer a BPM change until the next crotchet boundary for smoothness.
   void updateBpm(int newBpm) {
     if (!isRunning || newBpm == _bpm || newBpm == _pendingBpm) return;
     _pendingBpm = newBpm;
@@ -61,12 +82,12 @@ class TickService {
   void _scheduleNextTick() {
     if (_stopwatch == null) return;
     final target = _interval * (_subTickCount + 1);
-    final delay  = target - _stopwatch!.elapsed;
+    final delay = target - _stopwatch!.elapsed;
 
     _timer = Timer(delay.isNegative ? Duration.zero : delay, () {
       _emitTick();
 
-      // apply pending BPM at the next crotchet
+      // Apply pending BPM exactly on crotchet boundary
       if (_pendingBpm != null) {
         _bpm = _pendingBpm!;
         _interval = Duration(

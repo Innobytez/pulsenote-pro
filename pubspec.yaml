@@ -2,7 +2,7 @@ name: pulsenote_pro
 description: "PulseNote Pro – metronome, setlist and note generator for musicians."
 publish_to: 'none'
 
-version: 1.1.4+4
+version: 1.1.5+4
 
 environment:
   sdk: ^3.8.1
@@ -17,6 +17,8 @@ dependencies:
   flutter_soloud: ^3.2.1
   path_provider: ^2.0.15
   provider: ^6.1.5
+  audio_service: ^0.18.12
+  audio_session: ^0.1.22
 
 dev_dependencies:
   flutter_native_splash: ^2.4.0

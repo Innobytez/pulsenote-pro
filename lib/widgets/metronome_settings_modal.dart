@@ -4,32 +4,67 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/app_state_service.dart';
 
-class MetronomeSettingsModal extends StatelessWidget {
-  const MetronomeSettingsModal({Key? key}) : super(key: key);
+class MetronomeSettingsModal extends StatefulWidget {
+  // Existing props
+  final bool showTempoText;
+  final ValueChanged<bool> onShowTempoTextChanged;
+
+  // NEW: Skip Beats Mode props
+  final bool skipEnabled;
+  final int skipX;
+  final int skipY;
+  final ValueChanged<bool> onSkipEnabledChanged;
+  final void Function(int x, int y) onSkipValuesChanged;
+
+  const MetronomeSettingsModal({
+    super.key,
+    required this.showTempoText,
+    required this.onShowTempoTextChanged,
+    required this.skipEnabled,
+    required this.skipX,
+    required this.skipY,
+    required this.onSkipEnabledChanged,
+    required this.onSkipValuesChanged,
+  });
+
+  @override
+  State<MetronomeSettingsModal> createState() => _MetronomeSettingsModalState();
+}
+
+class _MetronomeSettingsModalState extends State<MetronomeSettingsModal> {
+  late bool _showTempoText; // local visual state
+
+  // Local mirrors for Skip Beats controls (so the dropdowns reflect instantly)
+  late bool _skipEnabled;
+  late int _skipX;
+  late int _skipY;
+
+  @override
+  void initState() {
+    super.initState();
+    _showTempoText = widget.showTempoText;
+
+    _skipEnabled = widget.skipEnabled;
+    _skipX = widget.skipX;
+    _skipY = widget.skipY;
+  }
 
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppStateService>();
-    final submenuStyle =
-        Theme.of(context).textTheme.bodySmall ?? const TextStyle(fontSize: 12);
+    final style = Theme.of(context).textTheme.bodySmall ?? const TextStyle(fontSize: 12);
 
     return Container(
       decoration: BoxDecoration(
         color: Colors.black,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-        // Grey outline at the very top to indicate the modal top edge
-        border: Border(
-          top: BorderSide(color: Colors.grey.shade800, width: 1),
-        ),
+        border: Border(top: BorderSide(color: Colors.grey.shade800, width: 1)),
       ),
       padding: const EdgeInsets.all(16),
       child: SwitchTheme(
-        // Force tealAccent styling for all Switches inside this modal
         data: SwitchThemeData(
           thumbColor: MaterialStateProperty.resolveWith((states) {
-            if (states.contains(MaterialState.selected)) {
-              return Colors.tealAccent;
-            }
+            if (states.contains(MaterialState.selected)) return Colors.tealAccent;
             return Colors.white70;
           }),
           trackColor: MaterialStateProperty.resolveWith((states) {
@@ -46,18 +81,17 @@ class MetronomeSettingsModal extends StatelessWidget {
             }
             return Colors.transparent;
           }),
-          // (Optional) slightly larger splash radius feels nicer in a modal
           splashRadius: 22,
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min, // Only take up needed vertical space
+          mainAxisSize: MainAxisSize.min, // shrink to fit
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Tempo Increase (unchanged)
             SwitchListTile(
               title: const Text('Tempo Increase', style: TextStyle(color: Colors.white)),
               value: appState.tempoIncreaseEnabled,
-              onChanged: appState.setTempoIncreaseEnabled,
-              // Ensure tile visuals match the dark modal
+              onChanged: (v) => context.read<AppStateService>().setTempoIncreaseEnabled(v),
               dense: true,
               contentPadding: EdgeInsets.zero,
             ),
@@ -65,38 +99,104 @@ class MetronomeSettingsModal extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: DefaultTextStyle(
-                  style: submenuStyle.copyWith(color: Colors.white70),
+                  style: style.copyWith(color: Colors.white70),
+                  child: Row(children: [
+                    const Text('Increase BPM by'),
+                    const SizedBox(width: 8),
+                    DropdownButton<int>(
+                      value: appState.tempoIncreaseX,
+                      dropdownColor: Colors.black,
+                      style: const TextStyle(color: Colors.white),
+                      iconEnabledColor: Colors.white70,
+                      items: List.generate(16, (i) => i + 1)
+                          .map((v) => DropdownMenuItem(value: v, child: Text('$v')))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          context.read<AppStateService>().setTempoIncreaseValues(
+                                v,
+                                appState.tempoIncreaseY,
+                              );
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    const Text('every'),
+                    const SizedBox(width: 8),
+                    DropdownButton<int>(
+                      value: appState.tempoIncreaseY,
+                      dropdownColor: Colors.black,
+                      style: const TextStyle(color: Colors.white),
+                      iconEnabledColor: Colors.white70,
+                      items: List.generate(16, (i) => i + 1)
+                          .map((v) => DropdownMenuItem(value: v, child: Text('$v')))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          context.read<AppStateService>().setTempoIncreaseValues(
+                                appState.tempoIncreaseX,
+                                v,
+                              );
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    const Text('beats'),
+                  ]),
+                ),
+              ),
+              
+            const Divider(color: Colors.white24),
+            // ── NEW: Skip Beats Mode
+            const SizedBox(height: 8),
+            SwitchListTile(
+              title: const Text('Skip Beats Mode', style: TextStyle(color: Colors.white)),
+              value: _skipEnabled,
+              onChanged: (v) {
+                setState(() => _skipEnabled = v);       // update visual
+                widget.onSkipEnabledChanged(v);          // persist + notify parent
+              },
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+            ),
+            if (_skipEnabled)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: DefaultTextStyle(
+                  style: style.copyWith(color: Colors.white70),
                   child: Row(
                     children: [
-                      const Text('Increase BPM by'),
+                      const Text('Play'),
                       const SizedBox(width: 8),
                       DropdownButton<int>(
-                        value: appState.tempoIncreaseX,
+                        value: _skipX,
                         dropdownColor: Colors.black,
                         style: const TextStyle(color: Colors.white),
                         iconEnabledColor: Colors.white70,
                         items: List.generate(16, (i) => i + 1)
-                            .map((v) => DropdownMenuItem(value: v, child: Text('$v')))
+                            .map((v) => DropdownMenuItem<int>(value: v, child: Text('$v')))
                             .toList(),
-                        onChanged: (newX) {
-                          if (newX == null) return;
-                          appState.setTempoIncreaseValues(newX, appState.tempoIncreaseY);
+                        onChanged: (v) {
+                          if (v == null) return;
+                          setState(() => _skipX = v);
+                          widget.onSkipValuesChanged(_skipX, _skipY);
                         },
                       ),
                       const SizedBox(width: 8),
-                      const Text('every'),
+                      const Text('beats then skip'),
                       const SizedBox(width: 8),
                       DropdownButton<int>(
-                        value: appState.tempoIncreaseY,
+                        value: _skipY,
                         dropdownColor: Colors.black,
                         style: const TextStyle(color: Colors.white),
                         iconEnabledColor: Colors.white70,
                         items: List.generate(16, (i) => i + 1)
-                            .map((v) => DropdownMenuItem(value: v, child: Text('$v')))
+                            .map((v) => DropdownMenuItem<int>(value: v, child: Text('$v')))
                             .toList(),
-                        onChanged: (newY) {
-                          if (newY == null) return;
-                          appState.setTempoIncreaseValues(appState.tempoIncreaseX, newY);
+                        onChanged: (v) {
+                          if (v == null) return;
+                          setState(() => _skipY = v);
+                          widget.onSkipValuesChanged(_skipX, _skipY);
                         },
                       ),
                       const SizedBox(width: 8),
@@ -105,6 +205,20 @@ class MetronomeSettingsModal extends StatelessWidget {
                   ),
                 ),
               ),
+
+            const Divider(color: Colors.white24),
+
+            // Show Tempo Text
+            SwitchListTile(
+              title: const Text('Show Tempo Text', style: TextStyle(color: Colors.white)),
+              value: _showTempoText,
+              onChanged: (v) {
+                setState(() => _showTempoText = v); // immediate visual update
+                widget.onShowTempoTextChanged(v);   // notify parent (persists)
+              },
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+            ),
           ],
         ),
       ),

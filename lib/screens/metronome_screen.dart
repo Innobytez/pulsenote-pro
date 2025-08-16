@@ -3,10 +3,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/app_state_service.dart';
 import '../services/audio_service.dart';
 import '../services/tick_service.dart';
+import '../services/playback_coordinator.dart';
+import '../services/system_media_handler.dart';
 import '../widgets/wheel_picker.dart';
 import '../widgets/metronome_settings_modal.dart';
 
@@ -25,6 +28,8 @@ class MetronomeScreen extends StatefulWidget {
 
 class _MetronomeScreenState extends State<MetronomeScreen> {
   final TickService _tickService = TickService();
+  final _coord = PlaybackCoordinator.instance;
+
   StreamSubscription<void>? _clickSub;
   StreamSubscription<void>? _tempoIncSub;
   bool _isRunning = false;
@@ -34,25 +39,126 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
   Timer? _tapResetTimer;
   DateTime? _tapSuppressionUntil;
 
+  // Local (screen-scoped) preferences
+  bool _showTempoText = false;
+
+  // Skip Beats Mode (local, persisted)
+  bool _skipEnabled = false;
+  int _skipX = 4; // play this many beats…
+  int _skipY = 4; // …then skip this many beats
+  int _skipCounter = 0;
+  bool _skipPhasePlay = true; // true=playing phase, false=skipping phase
+
+  void _publishMeta() {
+    final bpm = context.read<AppStateService>().bpm;
+    SystemMediaHandler.last?.setNowPlaying(title: 'Metronome', subtitle: '$bpm BPM');
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocalPrefs();
+
+    _coord.bind(
+      id: 'metronome',
+      onPlay: () async {
+        if (!_isRunning) _start();
+      },
+      onPause: () async {
+        if (_isRunning) _stop();
+      },
+      isPlaying: () => _isRunning,
+    );
+
+    if (widget.active) {
+      _coord.activate('metronome');
+      _publishMeta();
+    }
+  }
+
+  Future<void> _loadLocalPrefs() async {
+    final p = await SharedPreferences.getInstance();
+    setState(() {
+      _showTempoText = p.getBool('met_show_tempo_name') ?? false;
+      _skipEnabled   = p.getBool('met_skip_enabled') ?? false;
+      _skipX         = p.getInt('met_skip_x') ?? 4;
+      _skipY         = p.getInt('met_skip_y') ?? 4;
+      _skipX = _skipX.clamp(1, 16);
+      _skipY = _skipY.clamp(1, 16);
+    });
+  }
+
+  Future<void> _setShowTempoText(bool v) async {
+    setState(() => _showTempoText = v);
+    final p = await SharedPreferences.getInstance();
+    await p.setBool('met_show_tempo_name', v);
+  }
+
+  Future<void> _setSkipEnabled(bool v) async {
+    setState(() => _skipEnabled = v);
+    final p = await SharedPreferences.getInstance();
+    await p.setBool('met_skip_enabled', v);
+    _resetSkipCycle();
+  }
+
+  Future<void> _setSkipValues(int x, int y) async {
+    setState(() {
+      _skipX = x.clamp(1, 16);
+      _skipY = y.clamp(1, 16);
+    });
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('met_skip_x', _skipX);
+    await p.setInt('met_skip_y', _skipY);
+    _resetSkipCycle();
+  }
+
+  void _resetSkipCycle() {
+    _skipCounter = 0;
+    _skipPhasePlay = true;
+  }
+
   @override
   void didUpdateWidget(covariant MetronomeScreen old) {
     super.didUpdateWidget(old);
+
+    if (!old.active && widget.active) {
+      _coord.activate('metronome');
+      _publishMeta();
+    }
+
     if (old.active && !widget.active && _isRunning) {
       _stop();
     }
+  }
+
+  String _tempoName(int bpm) {
+    if (bpm < 24) return 'Larghissimo';
+    if (bpm < 40) return 'Grave';
+    if (bpm < 60) return 'Largo';
+    if (bpm < 66) return 'Larghetto';
+    if (bpm < 76) return 'Adagio';
+    if (bpm < 108) return 'Andante';
+    if (bpm < 120) return 'Moderato';
+    if (bpm < 156) return 'Allegro';
+    if (bpm < 176) return 'Vivace';
+    if (bpm < 200) return 'Presto';
+    return 'Prestissimo';
   }
 
   void _start() {
     final appState = context.read<AppStateService>();
     final bpm = appState.bpm;
 
-    // cleanup
+    _coord.activate('metronome');
+    _publishMeta();
+
     _clickSub?.cancel();
     _tempoIncSub?.cancel();
 
+    _resetSkipCycle();
+
     _tickService.start(bpm);
 
-    // tempo-increase
     if (appState.tempoIncreaseEnabled) {
       int counter = 0;
       _tempoIncSub = _tickService.tickStream.skip(1).listen((_) {
@@ -62,15 +168,35 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
           final newBpm = (appState.bpm + appState.tempoIncreaseX).clamp(10, 240);
           appState.setBpm(newBpm);
           _tickService.updateBpm(newBpm);
+          _publishMeta(); // live subtitle
         }
       });
     }
 
-    // live soundOn check each tick
     _clickSub = _tickService.tickStream.listen((_) {
       final now = DateTime.now();
       if (_tapSuppressionUntil != null && now.isBefore(_tapSuppressionUntil!)) return;
-      if (context.read<AppStateService>().soundOn) {
+
+      bool shouldClick = context.read<AppStateService>().soundOn;
+      if (_skipEnabled) {
+        if (_skipPhasePlay) {
+          shouldClick = shouldClick && true;
+          _skipCounter++;
+          if (_skipCounter >= _skipX) {
+            _skipCounter = 0;
+            _skipPhasePlay = false;
+          }
+        } else {
+          shouldClick = false;
+          _skipCounter++;
+          if (_skipCounter >= _skipY) {
+            _skipCounter = 0;
+            _skipPhasePlay = true;
+          }
+        }
+      }
+
+      if (shouldClick) {
         AudioService.playClick();
       }
     });
@@ -82,6 +208,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
     _tickService.stop();
     _clickSub?.cancel();
     _tempoIncSub?.cancel();
+    _resetSkipCycle();
     setState(() => _isRunning = false);
   }
 
@@ -90,6 +217,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
     final appState = context.read<AppStateService>();
     appState.setBpm(bpm);
     if (_isRunning) _tickService.updateBpm(bpm);
+    _publishMeta(); // live subtitle even when paused
   }
 
   void _tapTempo() {
@@ -114,6 +242,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
       final newBpm = (60000 / avg).clamp(10, 240).round();
       appState.setBpm(newBpm);
       if (_isRunning) _tickService.updateBpm(newBpm);
+      _publishMeta(); // live subtitle
     }
 
     if (context.read<AppStateService>().soundOn) {
@@ -130,11 +259,21 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
   }
 
   Future<void> _openSettings() async {
-    _stop();
+    if (_isRunning) _stop();
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (_) => const MetronomeSettingsModal(),
+      builder: (_) => MetronomeSettingsModal(
+        showTempoText: _showTempoText,
+        onShowTempoTextChanged: _setShowTempoText,
+
+        // Skip Beats bindings
+        skipEnabled: _skipEnabled,
+        skipX: _skipX,
+        skipY: _skipY,
+        onSkipEnabledChanged: _setSkipEnabled,
+        onSkipValuesChanged: _setSkipValues,
+      ),
     );
   }
 
@@ -143,6 +282,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
     _clickSub?.cancel();
     _tempoIncSub?.cancel();
     _tickService.stop();
+    _tapResetTimer?.cancel();
     super.dispose();
   }
 
@@ -154,9 +294,27 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
 
     return SafeArea(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          // BPM wheel
+          Expanded(
+            child: Center(
+              child: _showTempoText
+                  ? FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        _tempoName(appState.bpm),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.tealAccent,
+                          fontSize: 64,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ),
+
           SizedBox(
             height: wheelHeight,
             child: WheelPicker(
@@ -168,31 +326,26 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
             ),
           ),
 
-          // controls
           SizedBox(
             height: 100,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                // sound toggle
                 IconButton(
                   iconSize: 40,
                   icon: Icon(appState.soundOn ? Icons.volume_up : Icons.volume_off),
                   onPressed: _toggleSound,
                 ),
-                // play / stop
                 IconButton(
                   iconSize: 40,
                   icon: Icon(_isRunning ? Icons.stop_circle : Icons.play_circle),
                   onPressed: () => _isRunning ? _stop() : _start(),
                 ),
-                // tap tempo
                 IconButton(
                   iconSize: 40,
                   icon: const Icon(Icons.touch_app),
                   onPressed: _tapTempo,
                 ),
-                // settings
                 IconButton(
                   iconSize: 40,
                   icon: const Icon(Icons.settings),

@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/app_state_service.dart';
 import '../services/audio_service.dart';
 import '../services/tick_service.dart';
+import '../services/system_media_handler.dart';
+import '../services/playback_coordinator.dart';
 import '../widgets/wheel_picker.dart';
 
 class BpmEntry {
@@ -25,35 +27,94 @@ class BpmEntry {
 }
 
 class SetlistScreen extends StatefulWidget {
+  final bool active; // stop metronome when leaving tab
+  const SetlistScreen({super.key, required this.active});
+
   @override
-  _SetlistScreenState createState() => _SetlistScreenState();
+  State<SetlistScreen> createState() => _SetlistScreenState();
 }
 
 class _SetlistScreenState extends State<SetlistScreen> {
-  // name -> entries
   Map<String, List<BpmEntry>> _setlists = {};
   String _currentSetlist = 'Setlist 1';
-
   List<BpmEntry> get _setlist => _setlists[_currentSetlist] ?? <BpmEntry>[];
 
   late final ScrollController _scrollController;
   final TickService _tick = TickService();
   StreamSubscription<void>? _tickSub;
-  int? _playingIndex;
+
+  int? _playingIndex; // null when stopped
+  int _cursorIndex = 0; // where media controls start if not already playing
+
+  final _coord = PlaybackCoordinator.instance;
+
+  void _publishMeta({int? bpm}) {
+    final useBpm = bpm ??
+        (_playingIndex != null
+            ? _setlist[_playingIndex!].bpm
+            : (context.mounted ? context.read<AppStateService>().bpm : 0));
+    if (useBpm > 0) {
+      SystemMediaHandler.last?.setNowPlaying(
+        title: _currentSetlist,
+        subtitle: '$useBpm BPM',
+      );
+    } else {
+      SystemMediaHandler.last?.setNowPlaying(title: _currentSetlist, subtitle: '');
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
     _loadSetlists();
+
+    _coord.bind(
+      id: 'setlist',
+      onPlay: _coordPlay,
+      onPause: _coordPause,
+      onNext: _coordNext,
+      onPrevious: _coordPrevious,
+      isPlaying: () => _tick.isRunning,
+    );
   }
 
-  // ---------- Persistence + migration ----------
+  @override
+  void didUpdateWidget(covariant SetlistScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (!oldWidget.active && widget.active) {
+      _coord.activate('setlist');
+      if (_setlist.isNotEmpty) {
+        SystemMediaHandler.last?.setNowPlayingTitle(
+          _setlist[_clampCursor()].displayLabel,
+        );
+        _publishMeta(bpm: _setlist[_clampCursor()].bpm); // <-- enforce setlist title + BPM
+      } else {
+        SystemMediaHandler.last?.setNowPlayingTitle('Setlists');
+        _publishMeta(); // title to current setlist name (empty list → no BPM)
+      }
+    }
+
+    if (oldWidget.active && !widget.active) {
+      _stopMetronome();
+    }
+  }
+
+  @override
+  void dispose() {
+    _tickSub?.cancel();
+    _tick.stop();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  // ─────────────── Persistence + migration ───────────────
 
   Future<void> _loadSetlists() async {
     final prefs = await SharedPreferences.getInstance();
-    final legacy = prefs.getString('setlist');     // old: single list
-    final packed = prefs.getString('setlists');    // new: map<string, list>
+    final legacy = prefs.getString('setlist');
+    final packed = prefs.getString('setlists');
     final cur    = prefs.getString('current_setlist');
 
     if (packed == null && legacy != null) {
@@ -61,7 +122,6 @@ class _SetlistScreenState extends State<SetlistScreen> {
       _setlists = {'Setlist 1': decoded.map((e) => BpmEntry.fromJson(e)).toList()};
       _currentSetlist = 'Setlist 1';
       await _saveSetlists();
-      // (optional) await prefs.remove('setlist');
     } else if (packed != null) {
       final Map<String, dynamic> map = json.decode(packed);
       _setlists = map.map((k, v) => MapEntry(
@@ -77,7 +137,9 @@ class _SetlistScreenState extends State<SetlistScreen> {
       await _saveSetlists();
     }
 
+    _cursorIndex = _setlist.isEmpty ? 0 : _setlist.length - 1;
     setState(() {});
+    _publishMeta(); // reflect current setlist as soon as data loads
   }
 
   Future<void> _saveSetlists() async {
@@ -87,34 +149,8 @@ class _SetlistScreenState extends State<SetlistScreen> {
     await prefs.setString('current_setlist', _currentSetlist);
   }
 
-  Future<void> _renameSetlist(String oldName) async {
-    final newName = await _promptForName(
-      context, title: 'Rename Setlist', initial: oldName,
-    );
-    if (newName == null || newName.isEmpty || newName == oldName || _setlists.containsKey(newName)) {
-      return;
-    }
-
-    setState(() {
-      final entries = _setlists.remove(oldName)!;
-      _setlists[newName] = entries;
-      if (_currentSetlist == oldName) _currentSetlist = newName;
-    });
-    await _saveSetlists();
-  }
-
-  Future<void> _deleteSetlist(String name) async {
-    if (_setlists.length <= 1) return; // don't allow deleting the last setlist
-    setState(() {
-      _setlists.remove(name);
-      if (_currentSetlist == name) {
-        _currentSetlist = _firstOrDefaultName();
-      }
-    });
-    await _saveSetlists();
-  }
-
-  String _firstOrDefaultName() => _setlists.keys.isNotEmpty ? _setlists.keys.first : 'Setlist 1';
+  String _firstOrDefaultName() =>
+      _setlists.keys.isNotEmpty ? _setlists.keys.first : 'Setlist 1';
 
   String _generateSetlistName() {
     int i = 1;
@@ -122,7 +158,51 @@ class _SetlistScreenState extends State<SetlistScreen> {
     return 'Setlist $i';
   }
 
-  // ---------- Entry CRUD ----------
+  int _clampCursor() {
+    if (_setlist.isEmpty) return 0;
+    if (_cursorIndex < 0) return 0;
+    if (_cursorIndex >= _setlist.length) return _setlist.length - 1;
+    return _cursorIndex;
+  }
+
+  // ─────────────── Setlist ops ───────────────
+
+  Future<void> _renameSetlist(String oldName) async {
+    final newName = await _promptForName(
+      context, title: 'Rename Setlist', initial: oldName,
+    );
+    if (newName == null ||
+        newName.isEmpty ||
+        newName == oldName ||
+        _setlists.containsKey(newName)) {
+      return;
+    }
+
+    setState(() {
+      final entries = _setlists.remove(oldName)!;
+      _setlists[newName] = entries;
+      if (_currentSetlist == oldName) _currentSetlist = newName;
+      _cursorIndex = _setlist.isEmpty ? 0 : _setlist.length - 1;
+    });
+    await _saveSetlists();
+    _publishMeta(); // title changed
+  }
+
+  Future<void> _deleteSetlist(String name) async {
+    if (_setlists.length <= 1) return;
+    _stopMetronome();
+    setState(() {
+      _setlists.remove(name);
+      if (_currentSetlist == name) {
+        _currentSetlist = _firstOrDefaultName();
+      }
+      _cursorIndex = _setlist.isEmpty ? 0 : _setlist.length - 1;
+    });
+    await _saveSetlists();
+    _publishMeta();
+  }
+
+  // ─────────────── Entry CRUD ───────────────
 
   Future<void> _addEntry() async {
     _stopMetronome();
@@ -136,7 +216,6 @@ class _SetlistScreenState extends State<SetlistScreen> {
     setState(() {
       _setlists[_currentSetlist] ??= <BpmEntry>[];
       _setlists[_currentSetlist]!.insert(0, entry);
-      if (_playingIndex != null) _playingIndex = _playingIndex! + 1;
     });
     await _saveSetlists();
 
@@ -146,9 +225,11 @@ class _SetlistScreenState extends State<SetlistScreen> {
         0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut,
       );
     }
+    _publishMeta(); // BPM context might change where cursor points
   }
 
   Future<void> _editEntry(int index) async {
+    _stopMetronome();
     final entry = await showDialog<BpmEntry>(
       context: context,
       builder: (_) => _BpmEntryDialog(existing: _setlist[index]),
@@ -156,12 +237,24 @@ class _SetlistScreenState extends State<SetlistScreen> {
     if (entry == null) return;
     setState(() => _setlist[index] = entry);
     await _saveSetlists();
+
+    if (_playingIndex == index) {
+      SystemMediaHandler.last?.setNowPlayingTitle(_setlist[index].displayLabel);
+      _publishMeta(bpm: _setlist[index].bpm); // enforce setlist title + BPM
+    } else {
+      _publishMeta();
+    }
   }
 
   Future<void> _deleteEntry(int index) async {
     _stopMetronome();
-    setState(() => _setlist.removeAt(index));
+    setState(() {
+      _setlist.removeAt(index);
+      if (_cursorIndex >= _setlist.length) _cursorIndex = _setlist.length - 1;
+      if (_cursorIndex < 0) _cursorIndex = 0;
+    });
     await _saveSetlists();
+    _publishMeta();
   }
 
   Future<void> _onReorder(int oldIndex, int newIndex) async {
@@ -170,40 +263,103 @@ class _SetlistScreenState extends State<SetlistScreen> {
     _setlist.insert(newIndex, item);
 
     if (_playingIndex != null) {
-      if (_playingIndex == oldIndex) {
-        _playingIndex = newIndex;
-      } else if (oldIndex < _playingIndex! && newIndex >= _playingIndex!) {
-        _playingIndex = _playingIndex! - 1;
-      } else if (oldIndex > _playingIndex! && newIndex <= _playingIndex!) {
-        _playingIndex = _playingIndex! + 1;
-      }
+      if (_playingIndex == oldIndex)        _playingIndex = newIndex;
+      else if (oldIndex < _playingIndex! &&
+               newIndex >= _playingIndex!)   _playingIndex = _playingIndex! - 1;
+      else if (oldIndex > _playingIndex! &&
+               newIndex <= _playingIndex!)   _playingIndex = _playingIndex! + 1;
     }
+    if (_cursorIndex == oldIndex) _cursorIndex = newIndex;
 
     setState(() {});
     await _saveSetlists();
+    _publishMeta();
   }
 
-  // ---------- Playback ----------
+  // ─────────────── Playback core ───────────────
 
-  void _startMetronome(int bpm, int index) {
+  Future<void> _playAt(int index) async {
+    if (_setlist.isEmpty) return;
+    index = index.clamp(0, _setlist.length - 1);
+    final entry = _setlist[index];
+
     _stopMetronome();
-    _tick.start(bpm);
+
+    _coord.activate('setlist');
+    SystemMediaHandler.last?.setNowPlayingTitle(entry.displayLabel);
+    _publishMeta(bpm: entry.bpm); // enforce required title/subtitle
+
+    _tick.start(entry.bpm);
     _tickSub = _tick.tickStream.listen((_) {
       if (context.read<AppStateService>().soundOn) {
         AudioService.playClick();
       }
     });
-    setState(() => _playingIndex = index);
+
+    setState(() {
+      _playingIndex = index;
+      _cursorIndex  = index;
+    });
   }
 
   void _stopMetronome() {
     _tickSub?.cancel();
     _tick.stop();
-    setState(() => _playingIndex = null);
+    if (mounted) setState(() => _playingIndex = null);
   }
-  
+
+  // ─────────────── Coordinator callbacks (media controls) ───────────────
+
+  Future<void> _coordPlay() async {
+    if (_tick.isRunning || _setlist.isEmpty) return;
+    final start = _playingIndex ?? _clampCursor();
+    await _playAt(start);
+  }
+
+  Future<void> _coordPause() async {
+    _stopMetronome();
+  }
+
+  // Because reverse:true, visually "Next" (▶▶) should move DOWN ⇒ index - 1
+  Future<void> _coordNext() async {
+    if (_setlist.isEmpty) return;
+
+    final base = (_playingIndex ?? _clampCursor());
+    final next = base - 1; // reverse:true → down the screen
+
+    if (next < 0) return;
+
+    if (_tick.isRunning) {
+      await _playAt(next);
+    } else {
+      setState(() => _cursorIndex = next);
+      SystemMediaHandler.last?.setNowPlayingTitle(_setlist[next].displayLabel);
+      _publishMeta(bpm: _setlist[next].bpm); // enforce required title/subtitle
+    }
+  }
+
+  // And "Previous" (◀◀) should move UP ⇒ index + 1
+  Future<void> _coordPrevious() async {
+    if (_setlist.isEmpty) return;
+
+    final base = (_playingIndex ?? _clampCursor());
+    final prev = base + 1; // reverse:true → up the screen
+
+    if (prev >= _setlist.length) return;
+
+    if (_tick.isRunning) {
+      await _playAt(prev);
+    } else {
+      setState(() => _cursorIndex = prev);
+      SystemMediaHandler.last?.setNowPlayingTitle(_setlist[prev].displayLabel);
+      _publishMeta(bpm: _setlist[prev].bpm); // enforce required title/subtitle
+    }
+  }
+
+  // ─────────────── Setlist picker dialog ───────────────
+
   Future<void> _openSetlistPicker() async {
-    _stopMetronome(); // ensure nothing is playing while picking
+    _stopMetronome();
 
     await showDialog<void>(
       context: context,
@@ -211,7 +367,6 @@ class _SetlistScreenState extends State<SetlistScreen> {
         const rowHeight = 56.0;
         final maxBodyHeight = MediaQuery.of(ctx).size.height * 0.5;
 
-        // Capture the StatefulBuilder's setState so actions can refresh content
         void Function(void Function())? refreshDialog;
 
         return AlertDialog(
@@ -224,7 +379,7 @@ class _SetlistScreenState extends State<SetlistScreen> {
           title: const Text('Choose Setlist', style: TextStyle(color: Colors.white)),
           content: StatefulBuilder(
             builder: (ctx, setLocal) {
-              refreshDialog = setLocal; // <-- capture for use in actions
+              refreshDialog = setLocal;
 
               final names = _setlists.keys.toList()..sort();
               final estimated = names.length * rowHeight;
@@ -239,10 +394,13 @@ class _SetlistScreenState extends State<SetlistScreen> {
                     activeColor: Colors.tealAccent,
                     onChanged: (v) {
                       if (v == null) return;
-                      // Update the screen behind the dialog immediately
-                      setState(() => _currentSetlist = v);
+                      setState(() {
+                        _currentSetlist = v;
+                        _cursorIndex = _setlists[v]!.isEmpty ? 0 : _setlists[v]!.length - 1;
+                      });
                       _saveSetlists();
-                      setLocal(() {}); // refresh selection highlight in the dialog
+                      setLocal(() {});
+                      _publishMeta(); // reflect newly chosen setlist
                     },
                   ),
                   title: Text(name, style: const TextStyle(color: Colors.white)),
@@ -254,7 +412,8 @@ class _SetlistScreenState extends State<SetlistScreen> {
                         icon: const Icon(Icons.edit, color: Colors.white70),
                         onPressed: () async {
                           await _renameSetlist(name);
-                          setLocal(() {}); // refresh list
+                          setLocal(() {});
+                          _publishMeta();
                         },
                       ),
                       IconButton(
@@ -263,6 +422,7 @@ class _SetlistScreenState extends State<SetlistScreen> {
                         onPressed: () async {
                           await _deleteSetlist(name);
                           setLocal(() {});
+                          _publishMeta();
                         },
                       ),
                     ],
@@ -273,16 +433,13 @@ class _SetlistScreenState extends State<SetlistScreen> {
               final contentChild = (estimated <= maxBodyHeight)
                   ? Column(
                       mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ...names.map(buildTile),
-                        // (New setlist button moved to actions row)
-                      ],
+                      children: names.map(buildTile).toList(),
                     )
                   : SizedBox(
                       height: maxBodyHeight,
                       child: ListView.builder(
                         padding: EdgeInsets.zero,
-                        itemCount: names.length, // only tiles here
+                        itemCount: names.length,
                         itemBuilder: (_, i) => buildTile(names[i]),
                       ),
                     );
@@ -291,7 +448,6 @@ class _SetlistScreenState extends State<SetlistScreen> {
             },
           ),
           actions: [
-            // ⬇️ New setlist now inline with Close
             ElevatedButton.icon(
               icon: const Icon(Icons.add, color: Colors.black),
               label: const Text('New setlist', style: TextStyle(color: Colors.black)),
@@ -303,10 +459,12 @@ class _SetlistScreenState extends State<SetlistScreen> {
                 if (name == null || name.isEmpty || _setlists.containsKey(name)) return;
                 setState(() {
                   _setlists[name] = <BpmEntry>[];
-                  _currentSetlist = name; // select it immediately
+                  _currentSetlist = name;
+                  _cursorIndex = 0;
                 });
                 await _saveSetlists();
-                refreshDialog?.call(() {}); // refresh dialog content without closing
+                refreshDialog?.call(() {});
+                _publishMeta();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.tealAccent,
@@ -377,27 +535,56 @@ class _SetlistScreenState extends State<SetlistScreen> {
     );
   }
 
-  @override
-  void dispose() {
-    _tickSub?.cancel();
-    _tick.stop();
-    _scrollController.dispose();
-    super.dispose();
-  }
+  // ─────────────── UI (unchanged) ───────────────
 
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppStateService>();
+    final w = MediaQuery.of(context).size.width;
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            // List
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+              child: Column(
+                children: [
+                  Text(
+                    _currentSetlist,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.tealAccent,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    height: 1,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          Colors.transparent,
+                          Colors.grey,
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.5, 1.0],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             Expanded(
               child: Row(
                 children: [
-                  SizedBox(width: MediaQuery.of(context).size.width * 0.1),
+                  SizedBox(width: w * 0.1),
                   Expanded(
                     child: ReorderableListView(
                       key: const PageStorageKey('setlist'),
@@ -411,30 +598,26 @@ class _SetlistScreenState extends State<SetlistScreen> {
                       ],
                     ),
                   ),
-                  SizedBox(width: MediaQuery.of(context).size.width * 0.1),
+                  SizedBox(width: w * 0.1),
                 ],
               ),
             ),
 
-            // Bottom controls: match other screens (iconSize=40, no divider)
             SizedBox(
               height: 100,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  // mute
                   IconButton(
                     iconSize: 40,
                     icon: Icon(appState.soundOn ? Icons.volume_up : Icons.volume_off),
                     onPressed: () => appState.setSoundOn(!appState.soundOn),
                   ),
-                  // add entry
                   IconButton(
                     iconSize: 40,
                     icon: const Icon(Icons.add_circle),
                     onPressed: _addEntry,
                   ),
-                  // settings (choose setlist)
                   IconButton(
                     iconSize: 40,
                     icon: const Icon(Icons.settings),
@@ -449,23 +632,16 @@ class _SetlistScreenState extends State<SetlistScreen> {
     );
   }
 
-  // ---------- List item ----------
-
   Widget _buildListItem(BuildContext context, int index) {
     final entry = _setlist[index];
-    final isItemPlaying = _playingIndex == index;
+    final isPlaying = _playingIndex == index;
 
     return ListTile(
       key: ValueKey('$_currentSetlist-$index-${entry.hashCode}'),
-      title: Text(
-        entry.displayLabel,
-        overflow: TextOverflow.ellipsis,
-      ),
+      title: Text(entry.displayLabel, overflow: TextOverflow.ellipsis),
       leading: IconButton(
-        icon: Icon(isItemPlaying ? Icons.stop : Icons.play_arrow),
-        onPressed: () => isItemPlaying
-            ? _stopMetronome()
-            : _startMetronome(entry.bpm, index),
+        icon: Icon(isPlaying ? Icons.stop : Icons.play_arrow),
+        onPressed: () => isPlaying ? _stopMetronome() : _playAt(index),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -488,20 +664,18 @@ class _SetlistScreenState extends State<SetlistScreen> {
   }
 }
 
-/// ===== Add/Edit entry dialog (with Tap Tempo) =====
 class _BpmEntryDialog extends StatefulWidget {
   final BpmEntry? existing;
   const _BpmEntryDialog({this.existing});
 
   @override
-  _BpmEntryDialogState createState() => _BpmEntryDialogState();
+  State<_BpmEntryDialog> createState() => _BpmEntryDialogState();
 }
 
 class _BpmEntryDialogState extends State<_BpmEntryDialog> {
   final TextEditingController _labelController = TextEditingController();
   int _bpm = 100;
 
-  // tap tempo state
   final List<DateTime> _tapTimes = [];
   Timer? _tapResetTimer;
 
@@ -517,7 +691,6 @@ class _BpmEntryDialogState extends State<_BpmEntryDialog> {
   void _tapTempo() {
     final now = DateTime.now();
     _tapTimes.add(now);
-
     _tapResetTimer?.cancel();
     _tapResetTimer = Timer(const Duration(seconds: 6), () => _tapTimes.clear());
     if (_tapTimes.length > 4) _tapTimes.removeAt(0);
@@ -591,16 +764,13 @@ class _BpmEntryDialogState extends State<_BpmEntryDialog> {
             onBpmChanged: (val) => setState(() => _bpm = val),
           ),
           const SizedBox(height: 8),
-          // Tap tempo button
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
               onPressed: _tapTempo,
               icon: const Icon(Icons.touch_app, color: Colors.tealAccent),
               label: const Text('Tap tempo', style: TextStyle(color: Colors.tealAccent)),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.tealAccent,
-              ),
+              style: TextButton.styleFrom(foregroundColor: Colors.tealAccent),
             ),
           ),
         ],

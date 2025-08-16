@@ -5,25 +5,25 @@ import 'dart:ui'; // for lerpDouble
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../services/audio_service.dart';
 import '../services/tick_service.dart';
 import '../services/app_state_service.dart';
+import '../services/playback_coordinator.dart';
+import '../services/system_media_handler.dart';
 import '../widgets/wheel_picker.dart';
 import '../widgets/note_generator_settings_modal.dart';
 
 class NoteGeneratorScreen extends StatefulWidget {
   final bool active;
-  const NoteGeneratorScreen({
-    Key? key,
-    required this.active,
-  }) : super(key: key);
+  const NoteGeneratorScreen({Key? key, required this.active}) : super(key: key);
 
   @override
   State<NoteGeneratorScreen> createState() => _NoteGeneratorScreenState();
 }
 
 class _NoteGeneratorScreenState extends State<NoteGeneratorScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static const _defaultNotes = [
     'C','C#','D','D#','E','F','F#','G','G#','A','A#','B'
   ];
@@ -34,20 +34,65 @@ class _NoteGeneratorScreenState extends State<NoteGeneratorScreen>
   bool _autoMode = false;
   bool _prefsLoaded = false;
 
+  bool _appInForeground = true;
+
   late final TickService _tickService;
   StreamSubscription<void>? _tickSub;
   StreamSubscription<void>? _tempoIncSub;
   late final AnimationController _slideController;
 
+  void _publishMeta() {
+    final bpm = context.read<AppStateService>().bpm;
+    SystemMediaHandler.last?.setNowPlaying(
+      title: 'Random Note Generator',
+      subtitle: '$bpm BPM',
+    );
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     _tickService = TickService();
     _slideController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 200),
     );
     _loadNotePrefs();
+
+    PlaybackCoordinator.instance.bind(
+      id: 'generator',
+      onPlay: () async {
+        if (!_autoMode) _toggleAuto();
+      },
+      onPause: () async {
+        if (_autoMode) _toggleAuto();
+      },
+      isPlaying: () => _autoMode,
+    );
+
+    if (widget.active) {
+      PlaybackCoordinator.instance.activate('generator');
+      _publishMeta();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appInForeground = (state == AppLifecycleState.resumed);
+  }
+
+  @override
+  void didUpdateWidget(covariant NoteGeneratorScreen old) {
+    super.didUpdateWidget(old);
+    if (old.active && !widget.active && _autoMode) {
+      _stopInternal();
+    }
+    if (!old.active && widget.active) {
+      PlaybackCoordinator.instance.activate('generator');
+      _publishMeta();
+    }
   }
 
   Future<void> _loadNotePrefs() async {
@@ -55,7 +100,6 @@ class _NoteGeneratorScreenState extends State<NoteGeneratorScreen>
     final notesList = p.getStringList('selectedNotes');
     _selectedNotes = (notesList?.toSet() ?? _defaultNotes.toSet());
 
-    // pick first three
     _prev    = _randomNote();
     _current = _randomNote(exclude: _prev);
     _next    = _randomNote(exclude: _current);
@@ -76,65 +120,113 @@ class _NoteGeneratorScreenState extends State<NoteGeneratorScreen>
     return filtered.isNotEmpty ? filtered.first : _selectedNotes.first;
   }
 
-  Future<void> _advanceNote() async {
-    await _slideController.forward();
-    setState(() {
-      _prev    = _current;
-      _current = _next;
-      _next    = _randomNote(exclude: _current);
-    });
-    _slideController.reset();
+  void _advanceNote() {
+    if (!_prefsLoaded) return;
+
+    final newCurrent = _next.isNotEmpty ? _next : _randomNote(exclude: _current);
+    final newNext = _randomNote(exclude: newCurrent);
 
     if (context.read<AppStateService>().soundOn) {
-      AudioService.playNote(_current);
+      AudioService.playNote(newCurrent);
+    }
+
+    final isVisible = mounted && widget.active && _appInForeground;
+
+    if (isVisible) {
+      void commit() {
+        if (!mounted) return;
+        setState(() {
+          _prev = _current;
+          _current = newCurrent;
+          _next = newNext;
+        });
+        _slideController.reset();
+      }
+
+      void statusListener(AnimationStatus s) {
+        if (s == AnimationStatus.completed) {
+          _slideController.removeStatusListener(statusListener);
+          commit();
+        }
+      }
+
+      _slideController.removeStatusListener(statusListener);
+      _slideController.addStatusListener(statusListener);
+      _slideController.forward(from: 0);
+    } else {
+      _prev = _current;
+      _current = newCurrent;
+      _next = newNext;
+      if (mounted) setState(() {});
     }
   }
 
-  void _toggleAuto() {
+  void _installResumer() {
+    TickService().setBackgroundResumer(() async {
+      if (!_autoMode) _toggleAuto();
+    });
+  }
+
+  void _clearResumer() => TickService().setBackgroundResumer(null);
+
+  void _startInternal() {
     final appState = context.read<AppStateService>();
     final bpm = appState.bpm;
     final tempoX = appState.tempoIncreaseX;
     final tempoY = appState.tempoIncreaseY;
     final tempoOn = appState.tempoIncreaseEnabled;
 
-    if (!_autoMode) {
-      // start sub-beat playback
-      if (tempoOn) {
-        _tempoIncSub?.cancel();
-        bool first = false;
-        int count = 0;
-        _tempoIncSub = _tickService.tickStream.listen((_) {
-          if (!first) { first = true; return; }
-          count++;
-          if (count >= tempoY) {
-            count = 0;
-            appState.setBpm((appState.bpm + tempoX).clamp(10, 240));
-            _tickService.updateBpm(appState.bpm);
-          }
-        });
-      }
-      _tickSub?.cancel();
-      _tickSub = _tickService.tickStream.listen((_) => _advanceNote());
-      _tickService.start(bpm);
-    } else {
-      _tickSub?.cancel();
+    SystemMediaHandler.last?.setNowPlaying(
+      title: 'Random Note Generator',
+      subtitle: '$bpm BPM',
+    );
+
+    if (tempoOn) {
       _tempoIncSub?.cancel();
-      _tickService.stop();
+      bool first = false;
+      int count = 0;
+      _tempoIncSub = _tickService.tickStream.listen((_) {
+        if (!first) { first = true; return; }
+        count++;
+        if (count >= tempoY) {
+          count = 0;
+          appState.setBpm((appState.bpm + tempoX).clamp(10, 240));
+          _tickService.updateBpm(appState.bpm);
+          _publishMeta(); // live BPM
+        }
+      });
     }
 
-    setState(() => _autoMode = !_autoMode);
+    _tickSub?.cancel();
+    _tickSub = _tickService.tickStream.listen((_) => _advanceNote());
+    _tickService.start(bpm);
+
+    setState(() => _autoMode = true);
+    _installResumer();
+    PlaybackCoordinator.instance.activate('generator');
+  }
+
+  void _stopInternal() {
+    _tickSub?.cancel();
+    _tempoIncSub?.cancel();
+    _tickService.stop();
+    setState(() => _autoMode = false);
+    _clearResumer();
+  }
+
+  void _toggleAuto() {
+    if (!_autoMode) {
+      _startInternal();
+    } else {
+      _stopInternal();
+    }
   }
 
   void _manualNext() => _advanceNote();
 
   Future<void> _openSettings() async {
     final wasAuto = _autoMode;
-    if (wasAuto) {
-      _tickSub?.cancel();
-      _tempoIncSub?.cancel();
-      _tickService.stop();
-      setState(() => _autoMode = false);
-    }
+    if (wasAuto) _stopInternal();
 
     final wantSelect = await showModalBottomSheet<bool>(
       context: context,
@@ -145,17 +237,15 @@ class _NoteGeneratorScreenState extends State<NoteGeneratorScreen>
     if (wantSelect == true) {
       _showNoteSelector();
     }
-
   }
 
   void _showNoteSelector() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent, // show rounded corners
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModalState) {
-          // Pairs so enharmonics share a row
           const pairs = <List<String?>>[
             ['C',  'B#'],
             ['C#', 'Db'],
@@ -191,7 +281,6 @@ class _NoteGeneratorScreenState extends State<NoteGeneratorScreen>
             );
           }
 
-          // Wrap lets the sheet size itself to the child's intrinsic height.
           return Wrap(
             children: [
               Container(
@@ -204,7 +293,7 @@ class _NoteGeneratorScreenState extends State<NoteGeneratorScreen>
                   16, 16, 16, MediaQuery.of(ctx).viewInsets.bottom + 16,
                 ),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min, // size to content
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -230,8 +319,6 @@ class _NoteGeneratorScreenState extends State<NoteGeneratorScreen>
                       ],
                     ),
                     const SizedBox(height: 8),
-
-                    // Two-per-row with enharmonic pairs — no Expanded; shrink-wrap instead
                     ListView.separated(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -260,22 +347,13 @@ class _NoteGeneratorScreenState extends State<NoteGeneratorScreen>
   }
 
   @override
-  void didUpdateWidget(covariant NoteGeneratorScreen old) {
-    super.didUpdateWidget(old);
-    if (old.active && !widget.active && _autoMode) {
-      _tickSub?.cancel();
-      _tempoIncSub?.cancel();
-      _tickService.stop();
-      setState(() => _autoMode = false);
-    }
-  }
-
-  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tickSub?.cancel();
     _tempoIncSub?.cancel();
     _tickService.stop();
     _slideController.dispose();
+    _clearResumer();
     super.dispose();
   }
 
@@ -331,7 +409,11 @@ class _NoteGeneratorScreenState extends State<NoteGeneratorScreen>
               minBpm: 10,
               maxBpm: 240,
               wheelSize: w * 0.8,
-              onBpmChanged: (val) => appState.setBpm(val),
+              onBpmChanged: (val) {
+                appState.setBpm(val);
+                if (_autoMode) _tickService.updateBpm(val);
+                _publishMeta(); // live BPM even when paused
+              },
             ),
           ),
 
@@ -341,25 +423,21 @@ class _NoteGeneratorScreenState extends State<NoteGeneratorScreen>
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                // sound toggle
                 IconButton(
                   iconSize: 40,
                   icon: Icon(soundOn ? Icons.volume_up : Icons.volume_off),
                   onPressed: () => context.read<AppStateService>().setSoundOn(!soundOn),
                 ),
-                // play/pause
                 IconButton(
                   iconSize: 40,
                   icon: Icon(_autoMode ? Icons.pause_circle : Icons.play_circle),
                   onPressed: _toggleAuto,
                 ),
-                // next note
                 IconButton(
                   iconSize: 40,
                   icon: const Icon(Icons.skip_next),
                   onPressed: _manualNext,
                 ),
-                // settings
                 IconButton(
                   iconSize: 40,
                   icon: const Icon(Icons.settings),
